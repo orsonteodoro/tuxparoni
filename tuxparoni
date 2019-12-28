@@ -86,7 +86,7 @@ G_DOWNLOAD_TOOL="curl" # can be wget or curl
 G_REQ_CLEAR_CACHE=""
 G_KERNEL_TIMESTAMP=0
 G_HTML2TEXT_WIDTH=320 # to avoid malformed patch
-G_TUXPARONI_URL_RESOLVER_HASH="17b7c6e00782a27ff0f95de68269d5e0d90a87c081e975d4e74a876cf5c6773f" #sha256
+G_TUXPARONI_URL_RESOLVER_HASH="1205a034c63ee005529c1d71f77cc72c7db738a99e7a74612a1ca645a0b73ef6" #sha256
 G_UNATTENDED=0
 G_REQ_FETCH_JSONS=0
 G_REQ_FETCH_PATCHES=0
@@ -473,7 +473,11 @@ ban_commit() {
 		|| "${url}" =~ "redhat.com/errata/RHSA-" \
 		|| "${url}" =~ "novell.com/linux/security/advisories/" \
 		|| "${url}" =~ "debian.org/security/"[0-9]{4}"/dsa" \
-		|| "${url}" =~ "kernel.org".*"ChangeLog-"[0-9.]+$ ]] ; then
+		|| "${url}" =~ "kernel.org".*"ChangeLog-"[0-9.]+$ \
+		|| "${url}" =~ "show_bug.cgi" ]] ; then
+		# scraping from any bugzilla or dynamic page directly
+		# is dangerous.  An attacker has carte blanche freedom
+		# to post flaw.
 		url="info:  ${url}"
 	fi
 	echo "${url}"
