@@ -1118,6 +1118,8 @@ $(date -d "@${G_KERNEL_TIMESTAMP}")
 	[[ "${G_REQ_DRY_TEST}" == "1" ]] && drytest_cves
 	[[ "${G_REQ_BUILD_KPATCHES}" == "1" ]] && generate_kpatch_modules
 	[[ "${G_REQ_APPLY_PATCHES}" == "1" ]] && apply_patches
+
+	exit 0
 }
 
 main
