@@ -474,10 +474,12 @@ ban_commit() {
 		|| "${url}" =~ "novell.com/linux/security/advisories/" \
 		|| "${url}" =~ "debian.org/security/"[0-9]{4}"/dsa" \
 		|| "${url}" =~ "kernel.org".*"ChangeLog-"[0-9.]+$ \
-		|| "${url}" =~ "show_bug.cgi" ]] ; then
+		|| "${url}" =~ "show_bug.cgi" \
+		|| "${url}" =~ "bugs.launchpad.net" ]] ; then
 		# scraping from any bugzilla or dynamic page directly
 		# is dangerous.  An attacker has carte blanche freedom
-		# to post flaw.
+		# to post flaw if topic is not locked and rogue
+		# comment is not removed immediately.
 		url="info:  ${url}"
 	fi
 	echo "${url}"
