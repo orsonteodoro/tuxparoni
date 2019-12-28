@@ -829,7 +829,7 @@ apply_patches() {
 		elif [[ "${is_vulnerable}" == "0" ]] ; then
 			if is_path_authorized "${cve_id}" "${}" ; then
 				echo -e "\e[41m Applied \e[0m ${cve_id}"
-				if declare -f apply_backport > /dev/null ; then
+				if declare -f conflict_resolver > /dev/null ; then
 					if conflict_resolver "${cve_id}" \
 						"${G_PATCHES_DIR}/${p}" ; then
 						:;
