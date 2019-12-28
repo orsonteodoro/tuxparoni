@@ -699,9 +699,6 @@ drytest_cves() {
 			-i "${G_PATCHES_DIR}/${p}" 2> /dev/null 1> /dev/null
 		local is_vulnerable="$?"
 		if [[ "${is_previously_applied}" == 1 ]] ; then
-			patch -N --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-				-i "${G_PATCHES_DIR}/${p}"
-
 			# Try to avoid duplicate hunk problem
 			echo -e "\e[100m\e[97m  Rejected  \e[0m ${cve_id}"
 		elif [[ "${is_failed_at}" == "1" || "${is_file_to_patch}" == "1" ]] ; then
