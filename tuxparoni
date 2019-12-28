@@ -623,26 +623,35 @@ report_cves() {
 			local cve_id=$(jq "[.[]] | .[${i}].cveid" "${json_file}" | sed -r -e "s|\"||g")
 			local severity=$(get_severity)
 			local desc=$(jq "[.[]] | .[${i}].desc" "${json_file}" | sed -r -e "s|\"||g")
-			einfo "${cve_id}"
-			einfow "Description:  ${desc}"
-			einfo "NIST NVD:  https://nvd.nist.gov/vuln/detail/${cve_id}"
-			einfo "MITRE:  https://cve.mitre.org/cgi-bin/cvename.cgi?name=${cve_id}"
-			local url=$(jq ".[${i}].refdata.url" "${json_file}" | sed -r -e "s|\"||g")
-			einfo "Patch (message):  ${url}"
-			local url_raw=$(get_patch_direct_link "${url}" "${cve_id}" | sed -r -e "s#^(flaw|defunct|banned|info):  ##")
-			einfo "Patch (raw):  ${url_raw}"
-			if [[ "${severity}" == "CRITICAL" ]] ; then
-				einfo "Severity:  \e[100mCRITICAL\e[0m"
-			elif [[ "${severity}" == "HIGH" ]] ; then
-				einfo "Severity:  \e[41mHIGH\e[0m"
-			elif [[ "${severity}" == "MEDIUM" ]] ; then
-				einfo "Severity:  \e[43m\e[30mMedium\e[0m"
-			elif [[ "${severity}" == "LOW" ]] ; then
-				einfo "Severity:  \e[44m\e[30mLow\e[0m"
-			else
-				einfo "Severity:  N/A"
+
+			# todo
+			#patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
+			#	-i "${G_PATCHES_DIR}/${p}" 2> /dev/null 1> /dev/null
+			#local is_vulnerable="$?"
+			local is_vulnerable="0"
+
+			if [[ "${is_vulnerable}" == "0" ]] ; then
+				einfo "${cve_id}"
+				einfow "Description:  ${desc}"
+				einfo "NIST NVD:  https://nvd.nist.gov/vuln/detail/${cve_id}"
+				einfo "MITRE:  https://cve.mitre.org/cgi-bin/cvename.cgi?name=${cve_id}"
+				local url=$(jq ".[${i}].refdata.url" "${json_file}" | sed -r -e "s|\"||g")
+				einfo "Patch (message):  ${url}"
+				local url_raw=$(get_patch_direct_link "${url}" "${cve_id}" | sed -r -e "s#^(flaw|defunct|banned|info):  ##")
+				einfo "Patch (raw):  ${url_raw}"
+				if [[ "${severity}" == "CRITICAL" ]] ; then
+					einfo "Severity:  \e[100mCRITICAL\e[0m"
+				elif [[ "${severity}" == "HIGH" ]] ; then
+					einfo "Severity:  \e[41mHIGH\e[0m"
+				elif [[ "${severity}" == "MEDIUM" ]] ; then
+					einfo "Severity:  \e[43m\e[30mMedium\e[0m"
+				elif [[ "${severity}" == "LOW" ]] ; then
+					einfo "Severity:  \e[44m\e[30mLow\e[0m"
+				else
+					einfo "Severity:  N/A"
+				fi
+				einfo ""
 			fi
-			einfo ""
 		done
 	done
 	popd > /dev/null
