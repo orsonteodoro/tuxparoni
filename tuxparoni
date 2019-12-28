@@ -682,6 +682,10 @@ drytest_cves() {
 		local is_file_to_patch=0
 		local is_malformed=0
 		local is_previously_applied=0
+		local is_fuzzy_succeeded=0
+		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
+			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
+			| grep -q -F -e "succeeded at" && is_fuzzy_succeeded=1
 		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
 			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
 			| grep -q -F -e "FAILED at" && is_failed_at=1
@@ -698,9 +702,12 @@ drytest_cves() {
 		patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
 			-i "${G_PATCHES_DIR}/${p}" 2> /dev/null 1> /dev/null
 		local is_vulnerable="$?"
-		if [[ "${is_previously_applied}" == 1 ]] ; then
-			# Try to avoid duplicate hunk problem
-			echo -e "\e[100m\e[97m  Rejected  \e[0m ${cve_id}"
+		if [[ "${is_previously_applied}" == "1" \
+			&& "${is_fuzzy_succeeded}" != "1" \
+			&& "${is_failed_at}" != "1" \
+			&& "${is_file_to_patch}" != "1" \
+			&& "${is_malformed}" != "1" ]] ; then
+			echo -e "\e[42m\e[30m   Passed   \e[0m ${cve_id}"
 		elif [[ "${is_failed_at}" == "1" || "${is_file_to_patch}" == "1" ]] ; then
 			local h=$(sha256sum "${G_PATCHES_DIR}/${p}" | cut -f1 -d " ")
 			bad_ports=$((${bad_ports}+1))
@@ -712,8 +719,13 @@ drytest_cves() {
 		elif [[ "${is_vulnerable}" == "0" ]] ; then
 			echo -e "\e[41m Vulnerable \e[0m ${cve_id}"
 			c=$((c+1))
+		elif [[ "${is_previously_applied}" == 1 ]] ; then
+			local h=$(sha256sum "${G_PATCHES_DIR}/${p}" | cut -f1 -d " ")
+			# Try to avoid duplicate hunk problem
+			echo -e "\e[100m\e[97m  Rejected  \e[0m ${cve_id} sha256=${h} path=${G_PATCHES_DIR}/${p} (hp)"
 		else
-			echo -e "\e[42m\e[30m   Passed   \e[0m ${cve_id}"
+			eerror "uncaught case"
+			exit 1
 		fi
 	done
 	popd > /dev/null
@@ -818,7 +830,10 @@ apply_patches() {
 		local is_file_to_patch=0
 		local is_malformed=0
 		local is_previously_applied=0
-		local e=""
+		local is_fuzzy_succeeded=0
+		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
+			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
+			| grep -q -F -e "succeeded at" && is_fuzzy_succeeded=1
 		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
 			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
 			| grep -q -F -e "FAILED at" && is_failed_at=1
@@ -835,17 +850,18 @@ apply_patches() {
 		patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
 			-i "${G_PATCHES_DIR}/${p}" 2> /dev/null 1> /dev/null
 		local is_vulnerable="$?"
-		if [[ "${is_previously_applied}" == 1 ]] ; then
-			# Try to avoid duplicate hunk problem
-			echo -e "\e[100m\e[97m  Rejected  \e[0m ${cve_id}"
+		if [[ "${is_previously_applied}" == "1" \
+			&& "${is_fuzzy_succeeded}" != "1" \
+			&& "${is_failed_at}" != "1" \
+			&& "${is_file_to_patch}" != "1" \
+			&& "${is_malformed}" != "1" ]] ; then
+			echo -e "\e[42m\e[30m   Passed   \e[0m ${cve_id}"
 		elif [[ "${is_failed_at}" == "1" || "${is_file_to_patch}" == "1" ]] ; then
 			bad_ports=$((${bad_ports}+1))
-			#e=" at ${G_PATCHES_DIR}/${p}"
-			echo -e "\e[100m\e[97m  Bad port  \e[0m ${cve_id}"
+			echo -e "\e[100m\e[97m  Bad port  \e[0m ${cve_id} file=${G_PATCHES_DIR}/${p}"
 		elif [[ "${is_malformed}" == "1" ]] ; then
 			bad_patches=$((${bad_patches}+1))
-			e=" at ${G_PATCHES_DIR}/${p}"
-			echo -e "\e[100m\e[97m  Bad patch \e[0m ${cve_id} ${e}"
+			echo -e "\e[100m\e[97m  Bad patch \e[0m ${cve_id} file=${G_PATCHES_DIR}/${p}"
 		elif [[ "${is_vulnerable}" == "0" ]] ; then
 			if is_path_authorized "${cve_id}" "${}" ; then
 				echo -e "\e[41m Applied \e[0m ${cve_id}"
@@ -861,12 +877,16 @@ apply_patches() {
 					patch ${G_PATCH_DEFAULT_OPTIONS} \
 						-i "${G_PATCHES_DIR}/${p}"
 				fi
-				c=$((c+1))
 			else
 				echo -e "\e[100m\e[97m  Rejected  \e[0m ${cve_id} (unauthorized)"
 			fi
+			c=$((c+1))
+		elif [[ "${is_previously_applied}" == 1 ]] ; then
+			# Try to avoid duplicate hunk problem
+			echo -e "\e[100m\e[97m  Rejected  \e[0m ${cve_id} file=${G_PATCHES_DIR}/${p} (hp)"
 		else
-			echo -e "\e[42m\e[30m   Passed   \e[0m ${cve_id}"
+			eerror "uncaught case"
+			exit 1
 		fi
 	done
 	popd > /dev/null
