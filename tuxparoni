@@ -121,6 +121,8 @@ Args:
 	-ct, --cmd-dry-test		does a dry run per CVE patch to determine if sources are vulunerable
 	-cr, --cmd-report		shows a mini report per CVE
 	-ca, --cmd-apply		applies patches
+	-mx, --max-year			sets max year to process
+	-mn, --min-year			sets min year to process
 	--curl				downloads with curl (default)
 	--wget				downloads with wget
 	-h, --help			prints all the supported commands
@@ -969,6 +971,14 @@ arg_parse() {
 				;;
 			-ca|--cmd-apply)
 				G_REQ_APPLY_PATCHES="1"
+				;;
+			-mx|--max-year)
+				G_MAX_YEAR="${ARGS[0]}"
+				ARGS=("${ARGS[@]:1}")
+				;;
+			-mn|--min-year)
+				G_MIN_YEAR="${ARGS[0]}"
+				ARGS=("${ARGS[@]:1}")
 				;;
 			--curl)
 				G_DOWNLOAD_TOOL="curl"
