@@ -679,7 +679,7 @@ drytest_cves() {
 		cat /dev/null > "${t_out}"
 		# -f
 		local is_failed_at=0
-		local is_file_to_patch=0
+		local is_file_missing=0
 		local is_malformed=0
 		local is_previously_applied=0
 		local is_fuzzy_succeeded=0
@@ -691,7 +691,7 @@ drytest_cves() {
 			| grep -q -F -e "FAILED at" && is_failed_at=1
 		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
 			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
-			| grep -q -F -e "File to patch:" && is_file_to_patch=1
+			| grep -q -F -e "can't find file" && is_file_missing=1
 		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
 			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
 			| grep -q -F -e "malformed" && is_malformed=1
@@ -705,10 +705,10 @@ drytest_cves() {
 		if [[ "${is_previously_applied}" == "1" \
 			&& "${is_fuzzy_succeeded}" != "1" \
 			&& "${is_failed_at}" != "1" \
-			&& "${is_file_to_patch}" != "1" \
+			&& "${is_file_missing}" != "1" \
 			&& "${is_malformed}" != "1" ]] ; then
 			echo -e "\e[42m\e[30m   Passed   \e[0m ${cve_id}"
-		elif [[ "${is_failed_at}" == "1" || "${is_file_to_patch}" == "1" ]] ; then
+		elif [[ "${is_failed_at}" == "1" || "${is_file_missing}" == "1" ]] ; then
 			local h=$(sha256sum "${G_PATCHES_DIR}/${p}" | cut -f1 -d " ")
 			bad_ports=$((${bad_ports}+1))
 			echo -e "\e[100m\e[97m  Bad port  \e[0m ${cve_id} sha256=${h} path=${G_PATCHES_DIR}/${p}"
@@ -828,7 +828,7 @@ apply_patches() {
 		cat /dev/null > "${t_out}"
 		# -f
 		local is_failed_at=0
-		local is_file_to_patch=0
+		local is_file_missing=0
 		local is_malformed=0
 		local is_previously_applied=0
 		local is_fuzzy_succeeded=0
@@ -840,7 +840,7 @@ apply_patches() {
 			| grep -q -F -e "FAILED at" && is_failed_at=1
 		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
 			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
-			| grep -q -F -e "File to patch:" && is_file_to_patch=1
+			| grep -q -F -e "can't find file" && is_file_missing=1
 		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
 			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
 			| grep -q -F -e "malformed" && is_malformed=1
@@ -854,17 +854,17 @@ apply_patches() {
 		if [[ "${is_previously_applied}" == "1" \
 			&& "${is_fuzzy_succeeded}" != "1" \
 			&& "${is_failed_at}" != "1" \
-			&& "${is_file_to_patch}" != "1" \
+			&& "${is_file_missing}" != "1" \
 			&& "${is_malformed}" != "1" ]] ; then
 			echo -e "\e[42m\e[30m   Passed   \e[0m ${cve_id}"
-		elif [[ "${is_failed_at}" == "1" || "${is_file_to_patch}" == "1" ]] ; then
+		elif [[ "${is_failed_at}" == "1" || "${is_file_missing}" == "1" ]] ; then
 			bad_ports=$((${bad_ports}+1))
 			echo -e "\e[100m\e[97m  Bad port  \e[0m ${cve_id} file=${G_PATCHES_DIR}/${p}"
 		elif [[ "${is_malformed}" == "1" ]] ; then
 			bad_patches=$((${bad_patches}+1))
 			echo -e "\e[100m\e[97m  Bad patch \e[0m ${cve_id} file=${G_PATCHES_DIR}/${p}"
 		elif [[ "${is_vulnerable}" == "0" ]] ; then
-			if is_path_authorized "${cve_id}" "${}" ; then
+			if is_patch_authorized "${cve_id}" "${}" "${}" ; then
 				echo -e "\e[41m Applied \e[0m ${cve_id}"
 				if declare -f conflict_resolver > /dev/null ; then
 					if conflict_resolver "${cve_id}" \
