@@ -638,7 +638,7 @@ report_cves() {
 			elif [[ "${severity}" == "MEDIUM" ]] ; then
 				einfo "Severity:  \e[43m\e[30mMedium\e[0m"
 			elif [[ "${severity}" == "LOW" ]] ; then
-				einfo "Severity:  \e[44mLow\e[0m"
+				einfo "Severity:  \e[44m\e[30mLow\e[0m"
 			else
 				einfo "Severity:  N/A"
 			fi
