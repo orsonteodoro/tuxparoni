@@ -747,15 +747,20 @@ epatch() {
 # the failed dry run will spit out a sha256 of failed backport which can be used
 # to backport.
 
-# this will apply custom, fowardport, patches not just backport patches.
+# This will apply custom, fowardport patches not just backport patches.
+# You may used this to apply a sequence of patches or unreported patches.
+# You will used the patch_hash as like a hook.
+# You may used this to skip patches.
 
 # We don't distribute custom backport patches at the moment because of licensing,
 # but it left to custom kernel maintainers.
 
-# consumers are responsible to run patch, helpers tpatch and dpatch are provided
+# Consumers are responsible to runnning patch, helpers tpatch and dpatch are
+# provided.
 
-# return 0 on needs to accept alternative patch
-# return 1 if it doesn't need an alterantive patch
+# return 0 if you applied the patch
+# return 1 if it doesn't need an alterantive patch and it will proceed with
+# patching.
 conflict_resolver_default() {
 	local cve_id="${1}"
 	local patch_path="${2}" # original patch which can be used to revert or
