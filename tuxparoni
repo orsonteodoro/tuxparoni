@@ -75,7 +75,6 @@ NVD_JSON_SCHEMA_VERSION="1.1"
 PRODUCT="linux"
 
 G_CACHE_FOLDER="/var/cache/tuxparoni"
-# G_CUSTOM_PATCHES_DIR is really for custom patches not just backports or forward ports
 G_CUSTOM_PATCHES_DIR="${G_CACHE_FOLDER}/backports"
 G_KERNEL_SOURCE_FOLDER="/usr/src/linux"
 G_KERNEL_TAG=""
