@@ -95,6 +95,9 @@ G_REQ_REPORT=0
 G_REQ_APPLY_PATCHES=0
 G_REQ_KPATCH_MODULES=0
 G_PATCH_DEFAULT_OPTIONS="-p1 -F 100"
+G_FEEDS_DIR=""
+G_JSONS_DIR=""
+G_PATCHES_DIR=""
 
 EOK=0
 
@@ -893,9 +896,9 @@ get_tag() {
 }
 
 setup_globals() {
-	export G_FEEDS_DIR="${G_CACHE_FOLDER}/feeds"
-	export G_JSONS_DIR="${G_CACHE_FOLDER}/jsons"
-	export G_PATCHES_DIR="${G_CACHE_FOLDER}/patches"
+	G_FEEDS_DIR="${G_CACHE_FOLDER}/feeds"
+	G_JSONS_DIR="${G_CACHE_FOLDER}/jsons"
+	G_PATCHES_DIR="${G_CACHE_FOLDER}/patches"
 }
 
 _merged_mkdir() {
