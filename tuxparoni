@@ -685,7 +685,6 @@ is_patch_authorized() {
 			return 1
 		fi
 	done
-	for 
 	return 0
 }
 
@@ -702,7 +701,6 @@ apply_patches() {
 	for p in ${P} ; do
 		total=$((total+1))
 		local cve_id=$(basename "${p}" | cut -f2-4 -d "-")
-		if [[
 		local patch_timestamp=$(basename "${p}" | cut -f1 -d "-")
 		if (( ${patch_timestamp} >= ${G_KERNEL_TIMESTAMP} && ${displayed_kernel_release} == 0 )) ; then
 			echo -e "\e[44m\e[30m Kernel Released \e[0m"
