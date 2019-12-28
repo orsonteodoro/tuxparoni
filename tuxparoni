@@ -904,7 +904,7 @@ setup_globals() {
 _merged_mkdir() {
 	local path="${1}"
 	mkdir -p "${path}"
-	chmod 0660 "${path}"
+	chmod 0750 "${path}"
 	chown root:root "${path}"
 }
 
