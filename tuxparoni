@@ -175,12 +175,8 @@ was partly obtained from MITRE.
 source "${DIR}/tuxparoni-url-resolver"
 source "${DIR}/tuxparoni-conflict-resolver"
 
-G_NO_DOWNLOAD="0"
 G_LAST_URL=""
 download() {
-	if [[ "${G_NO_DOWNLOAD}" == "1" ]] ; then
-		return
-	fi
 	G_LAST_URL="${2}"
 	if [[ "$2" =~ ^defunct \
 	      || "$2" =~ ^banned \
@@ -669,7 +665,6 @@ drytest_cves() {
 		local is_file_to_patch=0
 		local is_malformed=0
 		local is_previously_applied=0
-		local e=""
 		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
 			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
 			| grep -q -F -e "FAILED at" && is_failed_at=1
@@ -690,13 +685,13 @@ drytest_cves() {
 			# Try to avoid duplicate hunk problem
 			echo -e "\e[100m\e[97m  Rejected  \e[0m ${cve_id}"
 		elif [[ "${is_failed_at}" == "1" || "${is_file_to_patch}" == "1" ]] ; then
+			local h=$(sha256sum "${G_PATCHES_DIR}/${p}" | cut -f1 -d " ")
 			bad_ports=$((${bad_ports}+1))
-			#e=" at ${G_PATCHES_DIR}/${p}"
-			echo -e "\e[100m\e[97m  Bad port  \e[0m ${cve_id}"
+			echo -e "\e[100m\e[97m  Bad port  \e[0m ${cve_id} sha256=${h} path=${G_PATCHES_DIR}/${p}"
 		elif [[ "${is_malformed}" == "1" ]] ; then
+			local h=$(sha256sum "${G_PATCHES_DIR}/${p}" | cut -f1 -d " ")
 			bad_patches=$((${bad_patches}+1))
-			e=" at ${G_PATCHES_DIR}/${p}"
-			echo -e "\e[100m\e[97m  Bad patch \e[0m ${cve_id} ${e}"
+			echo -e "\e[100m\e[97m  Bad patch \e[0m ${cve_id} sha256=${h} path=${G_PATCHES_DIR}/${p}"
 		elif [[ "${is_vulnerable}" == "0" ]] ; then
 			echo -e "\e[41m Vulnerable \e[0m ${cve_id}"
 			c=$((c+1))
