@@ -75,6 +75,8 @@ NVD_JSON_SCHEMA_VERSION="1.1"
 PRODUCT="linux"
 
 G_CACHE_FOLDER="/var/cache/tuxparoni"
+# G_CUSTOM_PATCHES_DIR is really for custom patches not just backports or forward ports
+G_CUSTOM_PATCHES_DIR="${G_CACHE_FOLDER}/backports"
 G_KERNEL_SOURCE_FOLDER="/usr/src/linux"
 G_KERNEL_TAG=""
 G_KERNEL_SOURCE_BIN=""
@@ -87,6 +89,13 @@ G_KERNEL_TIMESTAMP=0
 G_HTML2TEXT_WIDTH=320 # to avoid malformed patch
 G_TUXPARONI_RESOLVER_HASH="7f589739f9d043d3e27e76aaaa3ccb9d1837b75cc9dcb38bc8702af992f5d346" #sha256
 G_UNATTENDED=0
+G_REQ_FETCH_JSONS=0
+G_REQ_FETCH_PATCHES=0
+G_REQ_DRY_TEST=0
+G_REQ_REPORT=0
+G_REQ_APPLY_PATCHES=0
+G_REQ_KPATCH_MODULES=0
+G_PATCH_DEFAULT_OPTIONS="-p1 -F 100"
 
 EOK=0
 
@@ -106,7 +115,12 @@ Args:
 	-b, --kernel-bin		points to kernel binary location (e.g. /boot/vmlinuz)
 	-s, --kernel-src		points to kernel sources location (e.g. /usr/src/linux)
 	-g, --generate-kpatch-modules	generates kpatch modules
-	-u, --unattended		runs unattended
+	-u,  --unattended		runs unattended
+	-cj, --cmd-fetch-jsons		fetches, unpacks, filter NVD JSONs
+	-cp, --cmd-fetch-patches	fetches, dedupes, tidys commits or patches
+	-ct, --cmd-dry-test		does a dry run per CVE patch to determine if sources are vulunerable
+	-cr, --cmd-report		shows a mini report per CVE
+	-ca, --cmd-apply		applies patches
 	--curl				downloads with curl (default)
 	--wget				downloads with wget
 	-h, --help			prints all the supported commands
@@ -156,8 +170,8 @@ CVE data is under the public domain and obtained and provided by the NVD which
 was partly obtained from MITRE.
 "
 
-source "${DIR}/tuxparoni-resolver"
-source "${DIR}/tuxparoni-backports"
+source "${DIR}/tuxparoni-url-resolver"
+source "${DIR}/tuxparoni-conflict-resolver"
 
 G_NO_DOWNLOAD="0"
 G_LAST_URL=""
@@ -220,7 +234,8 @@ fetch_feeds() {
 			"${G_FEEDS_DIR}/nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json.gz" \
 			| cut -f1 -d " ")
 		if [[ "${expected_sz}" != "${x_sz}" && "${expected_h}" != "${x_h}" ]] ; then
-			echo -e "\e[41m\e[30m Failed \e[0m nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json.gz.  Clear cache."
+			echo -e \
+"\e[41m\e[30m Failed \e[0m nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json.gz.  Clear cache."
 			exit 1
 		fi
 		echo -e "\e[42m\e[30m Success \e[0m nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json.gz"
@@ -247,7 +262,8 @@ unpack_feeds() {
 				"${G_FEEDS_DIR}/nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json" \
 				| cut -f1 -d " ")
 			if [[ "${expected_sz}" != "${x_sz}" && "${expected_h}" != "${x_h}" ]] ; then
-				echo -e "\e[41m\e[30m Failed \e[0m nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json.  Clear cache."
+				echo -e \
+"\e[41m\e[30m Failed \e[0m nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json.  Clear cache."
 				exit 1
 			fi
 			echo -e "\e[42m\e[30m Success \e[0m nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json"
@@ -327,14 +343,17 @@ _process_patch() {
 
 		# reorder by timestamp for possibly combinediff
 		local timestamp=0
-		if is_patch_good "${src}" && grep -e "^Date:" "${src}" > /dev/null ; then
+		if is_patch_good "${src}" && grep -e "^Date:" "${src}" \
+			> /dev/null ; then
 			htimestamp=$(grep -r -e "^Date:" "${src}" | head -n 1 \
 				| sed -e "s|[^a-zA-Z0-9:, +-]||g" \
 				| sed -e "s|Date:[\t ]*||g" \
 				| sed -r -e "s|\([A-Z]+\)||g" -e "s|[ A-Z]+$||")
 			if echo "${url}" | cut -f4 -d " " | grep -q -e ":" ; then
 				htimestamp=$(echo "${htimestamp}" \
-					| sed -r -e "s|([A-Za-z]+)[,]? ([A-Za-z]+) ([0-9]+) ([0-9]{2}:[0-9]{2}:[0-9]{2}) ([0-9]{4}) ([+0-9-]+)|\1, \2 \3 \5 \4 \6|")
+					| sed -r -e \
+"s|([A-Za-z]+)[,]? ([A-Za-z]+) ([0-9]+) ([0-9]{2}:[0-9]{2}:[0-9]{2}) ([0-9]{4})\
+ ([+0-9-]+)|\1, \2 \3 \5 \4 \6|")
 			fi
 			timestamp=$(date -d "${htimestamp}" +%s)
 		else
@@ -372,12 +391,14 @@ _process_patch() {
 		fi
 		tags="${tags,,}"
 		tags=$(echo "${tags}" | sed -e "s|\.|_|g")
-		local dest_fn="${timestamp}-${cve_id}-${severity,,}-${module,,}${tags}.patch"
+		local dest_fn=\
+"${timestamp}-${cve_id}-${severity,,}-${module,,}${tags}.patch"
 		local dest="${G_PATCHES_DIR}/${dest_fn}"
 		mv "${src}" "${dest}"
 
 		if cat "${dest}" \
-			| grep -F 'Diff 1 not found or parse error; hopeless!' ; then
+			| grep -F 'Diff 1 not found or parse error; hopeless!'
+		then
 			rm "${dest}"
 			return 1
 		fi
@@ -635,7 +656,8 @@ drytest_cves() {
 		total=$((total+1))
 		local cve_id=$(basename "${p}" | cut -f2-4 -d "-")
 		local patch_timestamp=$(basename "${p}" | cut -f1 -d "-")
-		if (( ${patch_timestamp} >= ${G_KERNEL_TIMESTAMP} && ${displayed_kernel_release} == 0 )) ; then
+		if (( ${patch_timestamp} >= ${G_KERNEL_TIMESTAMP} \
+			&& ${displayed_kernel_release} == 0 )) ; then
 			echo -e "\e[44m\e[30m Kernel Released \e[0m"
 			displayed_kernel_release=1
 		fi
@@ -646,11 +668,21 @@ drytest_cves() {
 		local is_malformed=0
 		local is_previously_applied=0
 		local e=""
-		echo -e $(patch --dry-run -p1 -F 100 -i "${G_PATCHES_DIR}/${p}" 2>&1) | grep -q -F -e "FAILED at" && is_failed_at=1
-		echo -e $(patch --dry-run -p1 -F 100 -i "${G_PATCHES_DIR}/${p}" 2>&1) | grep -q -F -e "File to patch:" && is_file_to_patch=1
-		echo -e $(patch --dry-run -p1 -F 100 -i "${G_PATCHES_DIR}/${p}" 2>&1) | grep -q -F -e "malformed" && is_malformed=1
-		echo -e $(patch --dry-run -p1 -F 100 -i "${G_PATCHES_DIR}/${p}" 2>&1) | grep -q -F -e "Reversed (or previously applied)" && is_previously_applied=1
-		patch --dry-run -p1 -F 100 -i "${G_PATCHES_DIR}/${p}" 2> /dev/null 1> /dev/null
+		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
+			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
+			| grep -q -F -e "FAILED at" && is_failed_at=1
+		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
+			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
+			| grep -q -F -e "File to patch:" && is_file_to_patch=1
+		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
+			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
+			| grep -q -F -e "malformed" && is_malformed=1
+		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
+			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
+			| grep -q -F -e "Reversed (or previously applied)" \
+			&& is_previously_applied=1
+		patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
+			-i "${G_PATCHES_DIR}/${p}" 2> /dev/null 1> /dev/null
 		local is_vulnerable="$?"
 		if [[ "${is_previously_applied}" == 1 ]] ; then
 			# Try to avoid duplicate hunk problem
@@ -673,7 +705,10 @@ drytest_cves() {
 	popd > /dev/null
 	rm "${t_out}"
 	local hunks=$(grep -r -e "^@@" "${G_PATCHES_DIR}" | wc -l)
-	einfo "${c} vulnerabilities detected, ${total} total patches tested, ${bad_patches} bad patches, ${bad_ports} bad backports or forwardports patches, ${hunks} hunks involved"
+	einfo \
+"${c} vulnerabilities detected, ${total} total patches tested, ${bad_patches} \
+bad patches, ${bad_ports} bad backports or forwardports patches, ${hunks} \
+hunks involved"
 }
 
 is_patch_authorized() {
@@ -686,6 +721,57 @@ is_patch_authorized() {
 		fi
 	done
 	return 0
+}
+
+# true / triage patch
+# idea is to apply then do micro changes on the broken hunk
+tpatch() {
+	local patch_path="${patch_path}"
+	patch ${G_PATCH_DEFAULT_OPTIONS} -i "${patch_path}" || true
+	echo -e "\e[100m\e[97m  Triaged  \e[0m ${cve_id} ${patch_patch}"
+}
+
+# exit if broken
+epatch() {
+	local patch_path="${patch_path}"
+	patch ${G_PATCH_DEFAULT_OPTIONS} -i "${patch_path}"
+	if [[ "$?" != "0" ]] ; then
+		echo -e "\e[100m\e[97m   Failed  \e[0m ${cve_id} ${patch_patch}"
+		exit 1
+	else
+		echo -e "\e[100m\e[97m   Applied  \e[0m ${cve_id}"
+	fi
+}
+
+# Template function, it should be defined in tuxparoni-conflict-resolver as
+# conflict_resolver with custom entries like below per each sha256sum
+# the failed dry run will spit out a sha256 of failed backport which can be used
+# to backport.
+
+# this will apply custom, fowardport, patches not just backport patches.
+
+# We don't distribute custom backport patches at the moment because of licensing,
+# but it left to custom kernel maintainers.
+
+# consumers are responsible to run patch, helpers tpatch and dpatch are provided
+
+# return 0 on needs to accept alternative patch
+# return 1 if it doesn't need an alterantive patch
+conflict_resolver_default() {
+	local cve_id="${1}"
+	local patch_path="${2}" # original patch which can be used to revert or
+				# partially apply it
+	local patch_hash=$(sha256sum "${patch_path}" | cut -f1 -d " ")
+	local alterative_patch=""
+	if [[ "${patch_hash}" == "blah" ]] ; then
+		# path to patch
+		alternative_patch="${G_CUSTOM_PATCHES_DIR}/blah.patch"
+
+		dpatch "${alternative_patch}"
+		return 0
+	fi
+
+	return 1
 }
 
 apply_patches() {
@@ -702,7 +788,8 @@ apply_patches() {
 		total=$((total+1))
 		local cve_id=$(basename "${p}" | cut -f2-4 -d "-")
 		local patch_timestamp=$(basename "${p}" | cut -f1 -d "-")
-		if (( ${patch_timestamp} >= ${G_KERNEL_TIMESTAMP} && ${displayed_kernel_release} == 0 )) ; then
+		if (( ${patch_timestamp} >= ${G_KERNEL_TIMESTAMP} \
+			&& ${displayed_kernel_release} == 0 )) ; then
 			echo -e "\e[44m\e[30m Kernel Released \e[0m"
 			displayed_kernel_release=1
 		fi
@@ -713,11 +800,21 @@ apply_patches() {
 		local is_malformed=0
 		local is_previously_applied=0
 		local e=""
-		echo -e $(patch --dry-run -p1 -F 100 -i "${G_PATCHES_DIR}/${p}" 2>&1) | grep -q -F -e "FAILED at" && is_failed_at=1
-		echo -e $(patch --dry-run -p1 -F 100 -i "${G_PATCHES_DIR}/${p}" 2>&1) | grep -q -F -e "File to patch:" && is_file_to_patch=1
-		echo -e $(patch --dry-run -p1 -F 100 -i "${G_PATCHES_DIR}/${p}" 2>&1) | grep -q -F -e "malformed" && is_malformed=1
-		echo -e $(patch --dry-run -p1 -F 100 -i "${G_PATCHES_DIR}/${p}" 2>&1) | grep -q -F -e "Reversed (or previously applied)" && is_previously_applied=1
-		patch --dry-run -p1 -F 100 -i "${G_PATCHES_DIR}/${p}" 2> /dev/null 1> /dev/null
+		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
+			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
+			| grep -q -F -e "FAILED at" && is_failed_at=1
+		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
+			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
+			| grep -q -F -e "File to patch:" && is_file_to_patch=1
+		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
+			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
+			| grep -q -F -e "malformed" && is_malformed=1
+		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
+			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
+			| grep -q -F -e "Reversed (or previously applied)" \
+			&& is_previously_applied=1
+		patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
+			-i "${G_PATCHES_DIR}/${p}" 2> /dev/null 1> /dev/null
 		local is_vulnerable="$?"
 		if [[ "${is_previously_applied}" == 1 ]] ; then
 			# Try to avoid duplicate hunk problem
@@ -733,7 +830,18 @@ apply_patches() {
 		elif [[ "${is_vulnerable}" == "0" ]] ; then
 			if is_path_authorized "${cve_id}" "${}" ; then
 				echo -e "\e[41m Applied \e[0m ${cve_id}"
-				patch -p1 -F 100 -i "${G_PATCHES_DIR}/${p}"
+				if declare -f apply_backport > /dev/null ; then
+					if conflict_resolver "${cve_id}" \
+						"${G_PATCHES_DIR}/${p}" ; then
+						:;
+					else
+						patch ${G_PATCH_DEFAULT_OPTIONS} \
+							-i "${G_PATCHES_DIR}/${p}"
+					fi
+				else
+					patch ${G_PATCH_DEFAULT_OPTIONS} \
+						-i "${G_PATCHES_DIR}/${p}"
+				fi
 				c=$((c+1))
 			else
 				echo -e "\e[100m\e[97m  Rejected  \e[0m ${cve_id} (unauthorized)"
@@ -745,7 +853,10 @@ apply_patches() {
 	popd > /dev/null
 	rm "${t_out}"
 	local hunks=$(grep -r -e "^@@" "${G_PATCHES_DIR}" | wc -l)
-	einfo "${c} vulnerabilities detected, ${total} total patches tested, ${bad_patches} bad patches, ${bad_ports} bad backports or forwardports patches, ${hunks} hunks involved"
+	einfo \
+"${c} vulnerabilities detected, ${total} total patches tested, ${bad_patches} \
+bad patches, ${bad_ports} bad backports or forwardports patches, ${hunks} \
+hunks involved"
 }
 
 generate_kpatch_modules() {
@@ -755,7 +866,7 @@ generate_kpatch_modules() {
 		local cve_id=$(echo "${p}" | sed -r -e "s|(CVE-[0-9]+-[0-9]+).*|\1|")
 		local p_abs_path="${G_PATCHES_DIR}/${p}"
 		einfo "Testing patch at ${p_path}"
-		patch -f --dry-run -p1 -F 100 -i "${p_abs_path}" 2>&1 > /dev/null
+		patch -f --dry-run ${G_PATCH_DEFAULT_OPTIONS} -i "${p_abs_path}" 2>&1 > /dev/null
 		if [[ "$?" == "0" ]] ; then
 			ewarn "Kernel may be vulnerable to ${cve_id}.  Generating live patch."
 			kpatch-build -t "${G_KERNEL_SOURCE_BIN}" "${p_abs_path}"
@@ -843,6 +954,21 @@ arg_parse() {
 				;;
 			-u|--unattended)
 				G_UNATTENDED="1"
+				;;
+			-cj|--cmd-fetch-jsons)
+				G_REQ_FETCH_JSONS="1"
+				;;
+			-cp|--cmd-fetch-patches)
+				G_REQ_FETCH_PATCHES="1"
+				;;
+			-ct|--cmd-dry-test)
+				G_REQ_DRY_TEST="1"
+				;;
+			-cr|--cmd-report)
+				G_REQ_REPORT="1"
+				;;
+			-ca|--cmd-apply)
+				G_REQ_APPLY_PATCHES="1"
 				;;
 			--curl)
 				G_DOWNLOAD_TOOL="curl"
@@ -972,23 +1098,19 @@ $(date -d "@${G_KERNEL_TIMESTAMP}")
 	fi
 
 	setup_cache
-	#fetch_feeds
-	#unpack_feeds
-	#filter_jsons
-	fetch_patches
-	dedupe_patches_by_hash
-	tidy_patches
+	[[ "${G_REQ_FETCH_JSONS}" == "1" ]] && fetch_feeds
+	[[ "${G_REQ_FETCH_JSONS}" == "1" ]] && unpack_feeds
+	[[ "${G_REQ_FETCH_JSONS}" == "1" ]] && filter_jsons
+	[[ "${G_REQ_FETCH_PATCHES}" == "1" ]] && fetch_patches
+	[[ "${G_REQ_FETCH_PATCHES}" == "1" ]] && dedupe_patches_by_hash
+	[[ "${G_REQ_FETCH_PATCHES}" == "1" ]] && tidy_patches
 
-	kpatch_combine
+	[[ "${G_REQ_KPATCH_MODULES}" == "1" ]] && kpatch_combine
 
-	#report_cves
-	drytest_cves
-	if [[ "${G_REQ_BUILD_KPATCHES}" == "1" ]] ; then
-		generate_kpatch_modules
-	fi
-	if [[ "${G_REQ_APPLY_PATCHES}" == "1" ]] ; then
-		apply_patches
-	fi
+	[[ "${G_REQ_REPORT}" == "1" ]] && report_cves
+	[[ "${G_REQ_DRY_TEST}" == "1" ]] && drytest_cves
+	[[ "${G_REQ_BUILD_KPATCHES}" == "1" ]] && generate_kpatch_modules
+	[[ "${G_REQ_APPLY_PATCHES}" == "1" ]] && apply_patches
 }
 
 main
