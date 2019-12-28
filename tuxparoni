@@ -770,14 +770,15 @@ epatch() {
 }
 
 # Template function, it should be defined in tuxparoni-conflict-resolver as
-# conflict_resolver with custom entries like below per each sha256sum
-# the failed dry run will spit out a sha256 of failed backport which can be used
+# conflict_resolver with custom entries like below per each sha256sum.
+# The failed dry run will spit out a sha256 of the failed backport which can be used
 # to backport.
 
-# This will apply custom, fowardport patches not just backport patches.
-# You may used this to apply a sequence of patches or unreported patches.
-# You will used the patch_hash as like a hook.
-# You may used this to skip patches.
+# This will apply to custom or fowardport patches not just backport patches.
+# You may use this to apply more that one patch per failed patch.
+# You may use this to apply a sequence of patches or unreported patches.
+# You will use the patch_hash as like a hook.
+# You may use this to skip patches.
 
 # We don't distribute custom backport patches at the moment because of licensing,
 # but it left to custom kernel maintainers.
