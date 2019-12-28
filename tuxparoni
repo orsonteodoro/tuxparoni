@@ -139,7 +139,7 @@ Environmental variables:
 		0x00000001 - kernel.org repos
 		0x00000002 - github torvalds
 		0x00000004 - reserved
-		0x00000008 - tuxparoni maintainer(s)
+		0x00000008 - module maintainer(s)
 		0x00010000 - immediate NVD links
 		0x00020000 - indirect NVD links
 		0x00040000 - corporate reviewed
