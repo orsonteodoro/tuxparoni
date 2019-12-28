@@ -629,7 +629,7 @@ report_cves() {
 			einfo "MITRE:  https://cve.mitre.org/cgi-bin/cvename.cgi?name=${cve_id}"
 			local url=$(jq ".[${i}].refdata.url" "${json_file}" | sed -r -e "s|\"||g")
 			einfo "Patch (message):  ${url}"
-			local url_raw=$(get_patch_direct_link "${url}" "${cve_id}")
+			local url_raw=$(get_patch_direct_link "${url}" "${cve_id}" | sed -r -e "s#^(flaw|defunct|banned|info):  ##")
 			einfo "Patch (raw):  ${url_raw}"
 			if [[ "${severity}" == "CRITICAL" ]] ; then
 				einfo "Severity:  \e[100mCRITICAL\e[0m"
