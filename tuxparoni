@@ -39,7 +39,7 @@
 # 4) Most likely broken if reliance on completely automated patching.
 # 5) Sloppy tagging.  NVD mixes Patch with Exploit tags.  Patch implies fix;
 #    nothing else.
-# 6) Links contain references to commit (or supposed patch) but doesn't say if
+# 6) Links contain references to a commit (or supposed patch) but doesn't say if
 #    the commit is introducing the flaw.
 # 7) Possibility of re-applying the flaw (due to sloppy tagging or
 #    miscommunication of the report by the researcher) if no manual
@@ -47,9 +47,9 @@
 #    dualistic / ambigious.  It's better to use Fix or Flaw instead of Patch.
 
 # Arguments for using automated patching sample
-# 1) Faster rate of processing 3000 with jsons vs 100 by orders of magnitude
-#    with new manual entry and tools of database in around the same timebox.
-# 2) Saves time by orders of magnitude
+# 1) Faster rate of processing 3000 with JSONs vs 100 by orders of magnitude
+#    with manual entry of a new database in around the same timebox.
+# 2) It saves time by orders of magnitude.
 
 # Required dependencies
 # jq
