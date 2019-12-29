@@ -418,6 +418,7 @@ process_multipatch() {
 		tag2="msm-3.18"
 		_wd "${url}" "${src}"
 		_process_patch
+		return 0
 	fi
 	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/config_strict_memory_rwx-is-not-strictly-enforced-cve-2013-4737" ]] ; then
 		url="https://source.codeaurora.org/quic/la/kernel/msm/patch/?id=4256415b296348ff16cd17a5b8f8dce4dea37328"
@@ -425,6 +426,7 @@ process_multipatch() {
 		tag2="msm-3.x-jb-ics"
 		_wd "${url}" "${src}"
 		_process_patch
+		return 0
 	fi
 	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/improper-input-validation-in-mdp-driver-when-processing-color-maps-cve-2014-4323" ]] ; then
 		url="https://source.codeaurora.org/quic/la/kernel/msm-3.10/patch/?id=014fa8def84c62893fa016e873c12de1da498603"
@@ -432,6 +434,7 @@ process_multipatch() {
 		tag2="msm-3.10"
 		_wd "${url}" "${src}"
 		_process_patch
+		return 0
 	fi
 	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/integer-overflow-and-signedness-issue-in-camera-jpeg-engines-cve-2013-4736" ]] ; then
 		url="https://source.codeaurora.org/quic/la/kernel/msm/patch/?id=fab0bc54f4b70fd1d85300731822379a487d66ca"
@@ -451,12 +454,14 @@ process_multipatch() {
 		tag2="msm-3.x-jb-ics-gingerbread"
 		_wd "${url}" "${src}"
 		_process_patch
+		return 0
 	fi
 	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/lk-insufficient-verification-of-tag_addr-when-loading-device-tree-cve-2014-0974" ]] ; then
 		url="https://source.codeaurora.org/quic/la/kernel/lk/patch/?id=5e68eb8a09820d8447cb209558fbc237fcbfc41f"
 		tag1="master"
 		_wd "${url}" "${src}"
 		_process_patch
+		return 0
 	fi
 	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/memory-corruption-in-qseecom-driver-cve-2014-4322" ]] ; then
 		url="https://source.codeaurora.org/quic/la/kernel/msm-3.10/patch/?id=b9470692c228608ef0ec60747ac2732ad7ffedf0"
@@ -470,6 +475,7 @@ process_multipatch() {
 		tag2="msm-3.10"
 		_wd "${url}" "${src}"
 		_process_patch
+		return 0
 	fi
 	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/missing-access-checks-in-put_userget_user-kernel-api-cve-2013-6282" ]] ; then
 		url="https://source.codeaurora.org/quic/la/kernel/msm/patch/?id=76565e3d786bed66f247c682bd9f591098522483"
@@ -477,6 +483,7 @@ process_multipatch() {
 		tag2="msm-3.4-jb-ics"
 		_wd "${url}" "${src}"
 		_process_patch
+		return 0
 	fi
 	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/multiple-issues-in-camera-drivers-cve-2014-9410-cve-2015-0568" \
 		&& "${cve_id}" == "CVE-2014-9410" ]] ; then
@@ -487,6 +494,7 @@ process_multipatch() {
 		mv "${G_TEMP_DIR}/msm.git-43b4ff3bf3fbb02e85defcea939629f46506a217.patch" "${src}"
 		_process_patch
 		rm "${G_TEMP_DIR}/PATCH_8064_113026_check_vfe_cmd_usage_20150728.tar.gz"
+		return 0
 	fi
 	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/multiple-issues-in-camera-drivers-cve-2014-9410-cve-2015-0568" \
 		&& "${cve_id}" == "CVE-2015-0568" ]] ; then
@@ -497,6 +505,7 @@ process_multipatch() {
 		mv "${G_TEMP_DIR}/msm.git-8de3fe39e7c40190f82832253ed5946714e5bff1.patch" "${src}"
 		_process_patch
 		rm "${G_TEMP_DIR}/PATCH_8064_113028_cropinfo_pointer_fix_20150728.tar.gz"
+		return 0
 	fi
 	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/multiple-memory-corruption-issues-and-race-condition-in-goodix-gt915-touchscreen-driver-procfs-handler-cve-2013-4740-cve-2013-6122" ]] ; then
 		url="https://source.codeaurora.org/quic/la/kernel/msm-3.10/patch/?id=f53bcf29a6e7a66b3d935b8d562fa00829261f05"
@@ -504,6 +513,7 @@ process_multipatch() {
 		tag2="msm-3.10"
 		_wd "${url}" "${src}"
 		_process_patch
+		return 0
 	fi
 	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/buffer-overflow-in-msm_vidc-debugfs-driver-core_info_read-and-inst_info_read-cve-2017-8244" ]] ; then
 		url="https://source.codeaurora.org/quic/la/kernel/msm-3.10/patch/?id=f51b0f3b9da62e96b0167a3eb3376fca39fc7baf"
