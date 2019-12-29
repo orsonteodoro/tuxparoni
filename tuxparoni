@@ -845,7 +845,7 @@ conflict_resolver_default() {
 		# path to patch
 		alternative_patch="${G_CUSTOM_PATCHES_DIR}/blah.patch"
 
-		dpatch "${alternative_patch}"
+		epatch "${alternative_patch}"
 		return 0
 	fi
 
