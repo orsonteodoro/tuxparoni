@@ -1203,6 +1203,19 @@ ${G_MAX_YEAR_LIMIT}"
 		eerror "G_DOWNLOAD_TOOL must be curl or wget"
 		exit 1
 	fi
+	if [[ -n "${CVE_BLACKLIST_FIXES}" ]] ; then
+		for c in ${CVE_BLACKLIST_FIXES} ; do
+			if echo "${c}" \
+			 | grep -P -e "^CVE-[0-9]{4}-[0-9]+$"
+			then
+				:;
+			else
+				eerror \
+"${c} is invalid for a CVE id.  It must be all caps and in CVE-YYYY-XXXX format"
+				exit 1
+			fi
+		done
+	fi
 }
 
 main() {
