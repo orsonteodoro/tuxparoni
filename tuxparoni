@@ -1211,7 +1211,7 @@ ${G_MAX_YEAR_LIMIT}"
 				:;
 			else
 				eerror \
-"${c} is invalid for a CVE id.  It must be all caps and in CVE-YYYY-XXXX format"
+"${c} is invalid for a CVE ID.  It must be all caps and in CVE-YYYY-XXXX format"
 				exit 1
 			fi
 		done
