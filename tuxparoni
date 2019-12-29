@@ -84,11 +84,11 @@ G_MAX_YEAR_LIMIT="2019"
 G_MIN_YEAR="${G_MIN_YEAR_LIMIT}" # 2002 inclusive is the earliest, 2015 is year linux 4.0 was released
 G_MAX_YEAR="${G_MAX_YEAR_LIMIT}"
 G_DOWNLOAD_TOOL="curl" # can be wget or curl
-G_REQ_CLEAR_CACHE=""
 G_KERNEL_TIMESTAMP=0
 G_HTML2TEXT_WIDTH=320 # to avoid malformed patch
 G_TUXPARONI_URL_RESOLVER_HASH="ebd162e7fab9b01cbfe27ffe1ff0e9308574ac26beb1c97a119b8136d46ef6bd" #sha256
 G_UNATTENDED=0
+G_REQ_CLEAR_CACHE=0
 G_REQ_FETCH_JSONS=0
 G_REQ_FETCH_PATCHES=0
 G_REQ_DRY_TEST=0
@@ -108,12 +108,13 @@ CVE_FIX_TRUST_LEVEL_DEFAULT=$(0x00000001 | 0x00000002 | 0x00010000 | 0x00020000 
 | 0x00080000 | 0x04000000 | 0x01000000 | 0x01000000 \
 | 0x01000000)
 CVE_FIX_TRUST_LEVEL=${CVE_FIX_TRUST_LEVEL:=${CVE_FIX_TRUST_LEVEL_DEFAULT}}
-
+G_PATCH_META_VERSION="1.0"
+G_VERSION="1.1.0"
 
 EOK=0
 
 H_INFO="
-$(basename $BASH_SOURCE) v1.0
+$(basename $BASH_SOURCE) v${G_VERSION}
 Copyright 2019 Orson Teodoro
 License: MIT
 "
@@ -328,6 +329,7 @@ get_severity() {
 	echo "${severity}"
 }
 
+
 # required preconditions: src, dest, cve_id, PRODUCT, module, url all must be filled prior
 # optional preconditions: subject, tag1, tag2
 _process_patch() {
@@ -423,6 +425,22 @@ _process_patch() {
 			return 1
 		fi
 		echo -e "\e[42m\e[30m Accepted \e[0m ${cve_id} ${dest_fn} ${G_LAST_URL}"
+
+		# for drytest, report, and filtering drivers/subsystems for custom hardware setups
+		local meta_fn="${G_PATCHES_DIR}/$(basename ${dest_fn}).meta"
+		echo "meta_version: ${G_PATCH_META_VERSION}" > "${meta_fn}"
+		echo "severity: ${severity}" >> "${meta_fn}"
+		echo "timestamp: ${timestamp}" >> "${meta_fn}"
+		echo "subject: ${subject}" >> "${meta_fn}"
+		echo "original_url: ${url}" >> "${meta_fn}"
+		echo "last_url: ${G_LAST_URL}" >> "${meta_fn}"
+		[[ -n "${tag1}" ]] \
+			&& echo "tag1: ${tag1}" >> "${meta_fn}"
+		[[ -n "${tag2}" ]] \
+			&& echo "tag2: ${tag2}" >> "${meta_fn}"
+		# can be used to filter for device drivers
+		local files=$(cat "" | grep -P -e "^[+-]{3} " | cut -c 5- | sed -e "s|^[a,b]/||g" | uniq | tr "\n" " ")
+		echo "files: ${files}" >> "${meta_fn}"
 	fi
 	return 0
 }
@@ -1225,9 +1243,35 @@ main() {
 	review_envars
 	setup_globals
 	validate_envars_and_globals
-	if [[ "${G_REQ_CLEAR_CACHE}" ]] ; then
+
+	local X_VERSION
+	local X_PATCH_META_VERSION
+	local X_TUXPARONI_URL_RESOLVER_HASH
+	local need_wipe=0
+
+	if [[ -f "${G_CACHE_FOLDER}/status" ]] ; then
+		X_VERSION=$(grep -e "tuxparoni_version:" "${G_CACHE_FOLDER}/status" | cut -f2 -d $' ')
+		X_PATCH_META_VERSION=$(grep -e "meta_version:" "${G_CACHE_FOLDER}/status" | cut -f2 -d $' ')
+		X_TUXPARONI_URL_RESOLVER_HASH=$(grep -e "resolver_hash:" "${G_CACHE_FOLDER}/status" | cut -f2 -d $' ')
+
+		[[ "${X_VERSION}" != "${G_VERSION}" ]] \
+			&& need_wipe=1
+		[[ "${X_PATCH_META_VERSION}" != "${G_PATCH_META_VERSION}" ]] \
+			&& need_wipe=1
+		[[ "${X_TUXPARONI_URL_RESOLVER_HASH}" != "${G_TUXPARONI_URL_RESOLVER_HASH}" ]] \
+			&& need_wipe=1
+	else
+		need_wipe=1
+	fi
+
+	if [[ "${G_REQ_CLEAR_CACHE}" == "1" || "${need_wipe}" == "1" ]] ; then
 		clear_cache
 	fi
+
+	# this is used to wipe the cache if necessary
+	echo "tuxparoni_version: ${G_VERSION}" > "${G_CACHE_FOLDER}/status"
+	echo "meta_version: ${G_PATCH_META_VERSION}" >> "${G_CACHE_FOLDER}/status"
+	echo "resolver_hash: ${G_TUXPARONI_URL_RESOLVER_HASH}" >> "${G_CACHE_FOLDER}/status"
 
 	G_KERNEL_TAG=$(get_tag)
 	local ver=$(echo ${G_KERNEL_TAG} | cut -f1 -d "-")
