@@ -109,7 +109,7 @@ CVE_FIX_TRUST_LEVEL_DEFAULT=$(0x00000001 | 0x00000002 | 0x00010000 | 0x00020000 
 | 0x01000000)
 CVE_FIX_TRUST_LEVEL=${CVE_FIX_TRUST_LEVEL:=${CVE_FIX_TRUST_LEVEL_DEFAULT}}
 G_PATCH_META_VERSION="1.0"
-G_VERSION="1.1.0"
+G_VERSION="1.2.0"
 
 EOK=0
 
@@ -408,8 +408,9 @@ _process_patch() {
 		fi
 		tags="${tags,,}"
 		tags=$(echo "${tags}" | sed -e "s|\.|_|g")
-		local dest_fn=\
-"${timestamp}-${cve_id}-${severity,,}-${module,,}${tags}.patch"
+		local dest_fn_base=\
+"${timestamp}-${cve_id}-${severity,,}-${module,,}${tags}"
+		local dest_fn="${dest_fn_base}.patch"
 		local dest="${G_PATCHES_DIR}/${dest_fn}"
 		mv "${src}" "${dest}"
 
@@ -427,7 +428,7 @@ _process_patch() {
 		echo -e "\e[42m\e[30m Accepted \e[0m ${cve_id} ${dest_fn} ${G_LAST_URL}"
 
 		# for drytest, report, and filtering drivers/subsystems for custom hardware setups
-		local meta_fn="${G_PATCHES_DIR}/$(basename ${dest_fn}).meta"
+		local meta_fn="${G_PATCHES_DIR}/${dest_fn_base}.meta"
 		echo "meta_version: ${G_PATCH_META_VERSION}" > "${meta_fn}"
 		echo "severity: ${severity}" >> "${meta_fn}"
 		echo "timestamp: ${timestamp}" >> "${meta_fn}"
