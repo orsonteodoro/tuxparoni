@@ -444,7 +444,7 @@ _process_patch() {
 		# can be used to filter for device drivers
 		local files=$(cat "${dest}" | grep -P -e "^[+-]{3} " \
 			| cut -c 5- | sed -e "s|^[a,b]/||g" | uniq \
-			| cut -f1 -d $' ' | tr "\n" " ")
+			| cut -f1 -d $' ' | cut -f1 -d $'\t' | tr "\n" " ")
 		echo "files: ${files}" >> "${meta_path}"
 	fi
 	return 0
