@@ -109,7 +109,7 @@ CVE_FIX_TRUST_LEVEL_DEFAULT=$((0x00000001 | 0x00000002 | 0x00010000 | 0x00020000
 | 0x01000000))
 CVE_FIX_TRUST_LEVEL=${CVE_FIX_TRUST_LEVEL:=${CVE_FIX_TRUST_LEVEL_DEFAULT}}
 G_PATCH_META_VERSION="1.0"
-G_VERSION="1.2.0"
+G_VERSION="1.3.0"
 
 EOK=0
 
@@ -440,7 +440,7 @@ _process_patch() {
 		[[ -n "${tag2}" ]] \
 			&& echo "tag2: ${tag2}" >> "${meta_fn}"
 		# can be used to filter for device drivers
-		local files=$(cat "" | grep -P -e "^[+-]{3} " | cut -c 5- | sed -e "s|^[a,b]/||g" | uniq | tr "\n" " ")
+		local files=$(cat "${dest}" | grep -P -e "^[+-]{3} " | cut -c 5- | sed -e "s|^[a,b]/||g" | uniq | tr "\n" " ")
 		echo "files: ${files}" >> "${meta_fn}"
 	fi
 	return 0
