@@ -1153,7 +1153,7 @@ dedupe_patches_by_hash() {
 # git repo.
 tidy_patches() {
 	einfo "Running patch tidy"
-	for f in $(ls "${G_PATCHES_DIR}"/*) ; do
+	for f in $(ls "${G_PATCHES_DIR}"/*.patch) ; do
 		local t=$(tempfile)
 		if ! ( cat "${f}" | head -n 1 | tail -n +1 \
 			| grep -q -P -e "^From [0-9a-z]{40} " )
