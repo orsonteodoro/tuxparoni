@@ -650,6 +650,7 @@ download_patch() {
 	return 1
 }
 
+# this only reports if the patch was applied and doesn't consider CVEs without patches at the moment
 report_cves() {
 	pushd "${G_KERNEL_SOURCE_FOLDER}" > /dev/null
 	# 2002
@@ -670,7 +671,7 @@ report_cves() {
 				| sed -r -e "s|\"||g")
 
 			local is_vulnerable="0"
-			local P=$(ls "${G_PATCHES_DIR}"/*${cve_id}*)
+			local P=$(ls "${G_PATCHES_DIR}"/*${cve_id}*.patch 2>/dev/null)
 			for p in ${P} ; do
 				patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
 					-i "${p}" 2> /dev/null 1> /dev/null
@@ -678,7 +679,8 @@ report_cves() {
 				is_vulnerable=$((${is_vulnerable} | ${is_applied}))
 			done
 
-			if [[ "${is_vulnerable}" == "0" ]] ; then
+			local len_P=$(echo "${P[@]}" | wc -c)
+			if [[ "${is_vulnerable}" == "0" ]] && (( ${len_P} > 1 )) ; then
 				einfo "${cve_id}"
 				einfow "Description:  ${desc}"
 				einfo "NIST NVD:  https://nvd.nist.gov/vuln/detail/${cve_id}"
@@ -699,6 +701,7 @@ report_cves() {
 				else
 					einfo "Severity:  N/A"
 				fi
+				einfo "Vulnerable: possibly yes"
 				einfo ""
 			fi
 		done
