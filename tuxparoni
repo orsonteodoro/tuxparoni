@@ -1265,9 +1265,15 @@ main() {
 	local need_wipe=0
 
 	if [[ -f "${G_CACHE_FOLDER}/status" ]] ; then
-		X_VERSION=$(grep -e "tuxparoni_version:" "${G_CACHE_FOLDER}/status" | cut -f2 -d $' ')
-		X_PATCH_META_VERSION=$(grep -e "meta_version:" "${G_CACHE_FOLDER}/status" | cut -f2 -d $' ')
-		X_TUXPARONI_URL_RESOLVER_HASH=$(grep -e "resolver_hash:" "${G_CACHE_FOLDER}/status" | cut -f2 -d $' ')
+		X_VERSION=$(\
+			grep -e "tuxparoni_version:" "${G_CACHE_FOLDER}/status" \
+			| cut -f2 -d $' ')
+		X_PATCH_META_VERSION=$(\
+			grep -e "meta_version:" "${G_CACHE_FOLDER}/status" \
+			| cut -f2 -d $' ')
+		X_TUXPARONI_URL_RESOLVER_HASH=$(\
+			grep -e "resolver_hash:" "${G_CACHE_FOLDER}/status" \
+			| cut -f2 -d $' ')
 
 		[[ "${X_VERSION}" != "${G_VERSION}" ]] \
 			&& need_wipe=1
