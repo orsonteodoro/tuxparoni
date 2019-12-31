@@ -397,7 +397,8 @@ _process_patch() {
 
 		# module: hints subsystem and driver.
 		# severity: CVSS v3 but falls back to v2.
-		# timestamp: unix timestamp of the commit.  Useful for reordering patches.
+		# timestamp: unix timestamp of the commit.  Useful for
+		#            reordering patches.
 		# tags: additional metadata to filter for the device/arch.
 		tags=""
 		if [[ -n "${tag1}" ]] ; then
@@ -427,21 +428,24 @@ _process_patch() {
 		fi
 		echo -e "\e[42m\e[30m Accepted \e[0m ${cve_id} ${dest_fn} ${G_LAST_URL}"
 
-		# for drytest, report, and filtering drivers/subsystems for custom hardware setups
-		local meta_fn="${G_PATCHES_DIR}/${dest_fn_base}.meta"
-		echo "meta_version: ${G_PATCH_META_VERSION}" > "${meta_fn}"
-		echo "severity: ${severity}" >> "${meta_fn}"
-		echo "timestamp: ${timestamp}" >> "${meta_fn}"
-		echo "subject: ${subject}" >> "${meta_fn}"
-		echo "original_url: ${url}" >> "${meta_fn}"
-		echo "last_url: ${G_LAST_URL}" >> "${meta_fn}"
+		# for drytest, report, and filtering drivers/subsystems for
+		# custom hardware setups
+		local meta_path="${G_PATCHES_DIR}/${dest_fn_base}.meta"
+		echo "meta_version: ${G_PATCH_META_VERSION}" > "${meta_path}"
+		echo "severity: ${severity}" >> "${meta_path}"
+		echo "timestamp: ${timestamp}" >> "${meta_path}"
+		echo "subject: ${subject}" >> "${meta_path}"
+		echo "original_url: ${url}" >> "${meta_path}"
+		echo "last_url: ${G_LAST_URL}" >> "${meta_path}"
 		[[ -n "${tag1}" ]] \
-			&& echo "tag1: ${tag1}" >> "${meta_fn}"
+			&& echo "tag1: ${tag1}" >> "${meta_path}"
 		[[ -n "${tag2}" ]] \
-			&& echo "tag2: ${tag2}" >> "${meta_fn}"
+			&& echo "tag2: ${tag2}" >> "${meta_path}"
 		# can be used to filter for device drivers
-		local files=$(cat "${dest}" | grep -P -e "^[+-]{3} " | cut -c 5- | sed -e "s|^[a,b]/||g" | uniq | tr "\n" " ")
-		echo "files: ${files}" >> "${meta_fn}"
+		local files=$(cat "${dest}" | grep -P -e "^[+-]{3} " \
+			| cut -c 5- | sed -e "s|^[a,b]/||g" | uniq \
+			| tr "\n" " ")
+		echo "files: ${files}" >> "${meta_path}"
 	fi
 	return 0
 }
