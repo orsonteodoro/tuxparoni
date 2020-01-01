@@ -659,7 +659,8 @@ download_patch() {
 
 # this only reports based on configuration data
 report_cves_json_only() {
-
+	# todo
+	:;
 }
 
 # this only reports if the patch was applied and doesn't consider CVEs without patches at the moment
@@ -1139,7 +1140,7 @@ arg_parse() {
 
 kpatch_combine() {
 	#todo
-	true
+	:;
 }
 
 get_kernel_timestamp() {
