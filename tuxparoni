@@ -735,6 +735,7 @@ drytest_cves() {
 	pushd "${G_KERNEL_SOURCE_FOLDER}" > /dev/null
 	local t_out=$(tempfile)
 	local displayed_kernel_release=0
+	cat /dev/null > "${G_LOGS}/drytest"
 	while IFS= read -r p ; do
 		total=$((total+1))
 		local cve_id=$(basename "${p}" | cut -f2-4 -d "-")
