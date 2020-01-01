@@ -1114,7 +1114,7 @@ get_kernel_timestamp() {
 
 	local t=$(tempfile)
 	# strange bug
-	if ! wget -O "${t}" \
+	if ! wget -q -O "${t}" \
 "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/commit/?h=v${ver}"
 	then
 		eerror "Failed network, retry."
