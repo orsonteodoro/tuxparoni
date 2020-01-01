@@ -766,7 +766,7 @@ drytest_cves() {
 			| grep -q -F -e "Reversed (or previously applied)" \
 			&& is_previously_applied=1
 		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
+			-i "${p}" 2>&1) \
 			| grep -q -F -e "Only garbage was found in the patch input." \
 			&& is_garbage=1
 		patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
@@ -782,38 +782,38 @@ drytest_cves() {
 			echo -e "\e[42m\e[30m   Passed   \e[0m ${cve_id}" \
 			>> "${G_LOGS}/drytest"
 		elif [[ "${is_failed_at}" == "1" || "${is_file_missing}" == "1" ]] ; then
-			local h=$(sha256sum "${G_PATCHES_DIR}/${p}" | cut -f1 -d " ")
+			local h=$(sha256sum "${p}" | cut -f1 -d " ")
 			bad_ports=$((${bad_ports}+1))
 			echo -e \
 "\e[100m\e[97m  Bad port  \e[0m ${cve_id}"
 			echo -e \
-"\e[100m\e[97m  Bad port  \e[0m ${cve_id} sha256=${h} path=${G_PATCHES_DIR}/${p}" \
+"\e[100m\e[97m  Bad port  \e[0m ${cve_id} sha256=${h} path=${p}" \
 			>> "${G_LOGS}/drytest"
 		elif [[ "${is_malformed}" == "1" || "${is_garbage}" == "1" ]] ; then
-			local h=$(sha256sum "${G_PATCHES_DIR}/${p}" | cut -f1 -d " ")
+			local h=$(sha256sum "${p}" | cut -f1 -d " ")
 			bad_patches=$((${bad_patches}+1))
 			echo -e \
 "\e[100m\e[97m  Bad patch \e[0m ${cve_id}"
 			echo -e \
-"\e[100m\e[97m  Bad patch \e[0m ${cve_id} sha256=${h} path=${G_PATCHES_DIR}/${p}" \
+"\e[100m\e[97m  Bad patch \e[0m ${cve_id} sha256=${h} path=${p}" \
 			>> "${G_LOGS}/drytest"
 		elif [[ "${is_vulnerable}" == "0" ]] ; then
 			echo -e "\e[41m Vulnerable \e[0m ${cve_id}"
 			c=$((c+1))
 		elif [[ "${is_previously_applied}" == 1 ]] ; then
-			local h=$(sha256sum "${G_PATCHES_DIR}/${p}" | cut -f1 -d " ")
+			local h=$(sha256sum "${p}" | cut -f1 -d " ")
 			# Try to avoid duplicate hunk problem
 			echo -e \
 "\e[100m\e[97m  Rejected  \e[0m ${cve_id}"
 			echo -e \
-"\e[100m\e[97m  Rejected  \e[0m ${cve_id} sha256=${h} path=${G_PATCHES_DIR}/${p} (dupe hunk problem avoidance)" \
+"\e[100m\e[97m  Rejected  \e[0m ${cve_id} sha256=${h} path=${p} (dupe hunk problem avoidance)" \
 			>> "${G_LOGS}/drytest"
 		else
 			eerror \
 "uncaught case is_failed_at=${is_failed_at} is_file_missing=${is_file_missing} \
 is_malformed=${is_malformed} is_previously_applied=${is_previously_applied} \
 is_fuzzy_succeeded=${is_fuzzy_succeeded} is_vulnerable=${is_vulnerable}"
-			eerror "Patch: ${G_PATCHES_DIR}/${p}"
+			eerror "Patch: ${p}"
 			exit 1
 		fi
 	done
@@ -923,27 +923,27 @@ apply_patches() {
 		local is_fuzzy_succeeded=0
 		local is_garbage=0
 		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
+			-i "${p}" 2>&1) \
 			| grep -q -F -e "succeeded at" && is_fuzzy_succeeded=1
 		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
+			-i "${p}" 2>&1) \
 			| grep -q -F -e "FAILED at" && is_failed_at=1
 		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
+			-i "${p}" 2>&1) \
 			| grep -q -F -e "can't find file" && is_file_missing=1
 		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
+			-i "${p}" 2>&1) \
 			| grep -q -F -e "malformed" && is_malformed=1
 		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
+			-i "${p}" 2>&1) \
 			| grep -q -F -e "Reversed (or previously applied)" \
 			&& is_previously_applied=1
 		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
+			-i "${p}" 2>&1) \
 			| grep -q -F -e "Only garbage was found in the patch input." \
 			&& is_garbage=1
 		patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${G_PATCHES_DIR}/${p}" 2> /dev/null 1> /dev/null
+			-i "${p}" 2> /dev/null 1> /dev/null
 		local is_vulnerable="$?"
 		if [[ "${is_previously_applied}" == "1" \
 			&& "${is_fuzzy_succeeded}" != "1" \
@@ -954,24 +954,24 @@ apply_patches() {
 			echo -e "\e[42m\e[30m   Passed   \e[0m ${cve_id}"
 		elif [[ "${is_failed_at}" == "1" || "${is_file_missing}" == "1" ]] ; then
 			bad_ports=$((${bad_ports}+1))
-			echo -e "\e[100m\e[97m  Bad port  \e[0m ${cve_id} file=${G_PATCHES_DIR}/${p}"
+			echo -e "\e[100m\e[97m  Bad port  \e[0m ${cve_id} file=${p}"
 		elif [[ "${is_malformed}" == "1" || "${is_garbage}" == "1" ]] ; then
 			bad_patches=$((${bad_patches}+1))
-			echo -e "\e[100m\e[97m  Bad patch \e[0m ${cve_id} file=${G_PATCHES_DIR}/${p}"
+			echo -e "\e[100m\e[97m  Bad patch \e[0m ${cve_id} file=${p}"
 		elif [[ "${is_vulnerable}" == "0" ]] ; then
 			if is_patch_authorized "${cve_id}" "${}" "${}" ; then
 				echo -e "\e[41m Applied \e[0m ${cve_id}"
 				if declare -f conflict_resolver > /dev/null ; then
 					if conflict_resolver "${cve_id}" \
-						"${G_PATCHES_DIR}/${p}" ; then
+						"${p}" ; then
 						:;
 					else
 						patch ${G_PATCH_DEFAULT_OPTIONS} \
-							-i "${G_PATCHES_DIR}/${p}"
+							-i "${p}"
 					fi
 				else
 					patch ${G_PATCH_DEFAULT_OPTIONS} \
-						-i "${G_PATCHES_DIR}/${p}"
+						-i "${p}"
 				fi
 			else
 				echo -e "\e[100m\e[97m  Rejected  \e[0m ${cve_id} (unauthorized)"
@@ -979,7 +979,7 @@ apply_patches() {
 			c=$((c+1))
 		elif [[ "${is_previously_applied}" == 1 ]] ; then
 			# Try to avoid duplicate hunk problem
-			echo -e "\e[100m\e[97m  Rejected  \e[0m ${cve_id} file=${G_PATCHES_DIR}/${p} (hp)"
+			echo -e "\e[100m\e[97m  Rejected  \e[0m ${cve_id} file=${p} (hp)"
 		else
 			eerror "uncaught case"
 			exit 1
@@ -999,7 +999,7 @@ generate_kpatch_modules() {
 	pushd "${G_KERNEL_SOURCE_FOLDER}" > /dev/null
 	for p in ${P} ; do
 		local cve_id=$(echo "${p}" | sed -r -e "s|(CVE-[0-9]+-[0-9]+).*|\1|")
-		local p_abs_path="${G_PATCHES_DIR}/${p}"
+		local p_abs_path="${p}"
 		einfo "Testing patch at ${p_path}"
 		patch -f --dry-run ${G_PATCH_DEFAULT_OPTIONS} -i "${p_abs_path}" 2>&1 > /dev/null
 		if [[ "$?" == "0" ]] ; then
