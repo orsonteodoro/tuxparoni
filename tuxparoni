@@ -75,8 +75,8 @@ NVD_JSON_SCHEMA_VERSION="1.1"
 PRODUCT="linux"
 
 G_CACHE_FOLDER="/var/cache/tuxparoni"
-G_CUSTOM_PATCHES_DIR="${G_CACHE_FOLDER}/custom_patches"
 G_KERNEL_SOURCE_FOLDER="/usr/src/linux"
+G_CUSTOM_PATCHES_DIR="${G_CACHE_FOLDER}/custom_patches"
 G_LOGS="${G_CACHE_FOLDER}/logs"
 G_KERNEL_TAG=""
 G_KERNEL_SOURCE_BIN=""
@@ -1035,6 +1035,8 @@ setup_globals() {
 	G_FEEDS_DIR="${G_CACHE_FOLDER}/feeds"
 	G_JSONS_DIR="${G_CACHE_FOLDER}/jsons"
 	G_PATCHES_DIR="${G_CACHE_FOLDER}/patches"
+	G_CUSTOM_PATCHES_DIR="${G_CACHE_FOLDER}/custom_patches"
+	G_LOGS="${G_CACHE_FOLDER}/logs"
 }
 
 _merged_mkdir() {
