@@ -684,13 +684,15 @@ report_cves_patches_only() {
 				| sed -r -e "s|\"||g")
 
 			local is_vulnerable="0"
-			local P=$(ls "${G_PATCHES_DIR}"/*${cve_id}*.patch 2>/dev/null)
-			for p in ${P} ; do
+			local t_files=$(tempfile)
+			ls "${G_PATCHES_DIR}"/*${cve_id}*.patch > "${t_files}" 2>/dev/null
+			while IFS= read -r p ; do
 				patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
 					-i "${p}" 2> /dev/null 1> /dev/null
 				is_applied="$?"
 				is_vulnerable=$((${is_vulnerable} | ${is_applied}))
-			done
+			done < "${t_files}"
+			rm "${t_files}"
 
 			local len_P=$(echo "${P[@]}" | wc -c)
 			if [[ "${is_vulnerable}" == "0" ]] && (( ${len_P} > 1 )) ; then
@@ -724,7 +726,8 @@ report_cves_patches_only() {
 
 drytest_cves() {
 	einfo "Drytesting"
-	P=$(ls "${G_PATCHES_DIR}"/*.patch)
+	local t_files=$(tempfile)
+	ls "${G_PATCHES_DIR}"/*.patch > "${t_files}" 2>/dev/null
 	local c=0
 	local total=0
 	local bad_patches=0
@@ -732,7 +735,7 @@ drytest_cves() {
 	pushd "${G_KERNEL_SOURCE_FOLDER}" > /dev/null
 	local t_out=$(tempfile)
 	local displayed_kernel_release=0
-	for p in ${P} ; do
+	while IFS= read -r p ; do
 		total=$((total+1))
 		local cve_id=$(basename "${p}" | cut -f2-4 -d "-")
 		local patch_timestamp=$(basename "${p}" | cut -f1 -d "-")
@@ -814,11 +817,14 @@ drytest_cves() {
 is_malformed=${is_malformed} is_previously_applied=${is_previously_applied} \
 is_fuzzy_succeeded=${is_fuzzy_succeeded} is_vulnerable=${is_vulnerable}"
 			eerror "Patch: ${p}"
+			rm "${t_out}"
+			rm "${t_files}"
 			exit 1
 		fi
-	done
-	popd > /dev/null
+	done < "${t_files}"
 	rm "${t_out}"
+	popd > /dev/null
+	rm "${t_files}"
 	local hunks=$(grep -r -e "^@@" "${G_PATCHES_DIR}" | wc -l)
 	einfo \
 "${c} vulnerabilities detected, ${total} total patches tested, ${bad_patches} \
@@ -897,7 +903,8 @@ conflict_resolver_default() {
 
 apply_patches() {
 	einfo "Applying"
-	P=$(ls "${G_PATCHES_DIR}"/*.patch)
+	local t_files=$(tempfile)
+	ls "${G_PATCHES_DIR}"/*.patch > "${t_files}" 2>/dev/null
 	local c=0
 	local total=0
 	local bad_patches=0
@@ -905,7 +912,7 @@ apply_patches() {
 	pushd "${G_KERNEL_SOURCE_FOLDER}" > /dev/null
 	local t_out=$(tempfile)
 	local displayed_kernel_release=0
-	for p in ${P} ; do
+	while IFS= read -r p ; do
 		total=$((total+1))
 		local cve_id=$(basename "${p}" | cut -f2-4 -d "-")
 		local patch_timestamp=$(basename "${p}" | cut -f1 -d "-")
@@ -982,11 +989,14 @@ apply_patches() {
 			echo -e "\e[100m\e[97m  Rejected  \e[0m ${cve_id} file=${p} (hp)"
 		else
 			eerror "uncaught case"
+			rm "${t_out}"
+			rm "${f_files}"
 			exit 1
 		fi
-	done
-	popd > /dev/null
+	done < "${t_files}"
 	rm "${t_out}"
+	popd > /dev/null
+	rm "${t_files}"
 	local hunks=$(grep -r -e "^@@" "${G_PATCHES_DIR}" | wc -l)
 	einfo \
 "${c} vulnerabilities detected, ${total} total patches tested, ${bad_patches} \
@@ -995,9 +1005,10 @@ hunks involved"
 }
 
 generate_kpatch_modules() {
-	P=$(ls "${G_PATCHES_DIR}"/*.patch)
+	local t_files=$(tempfile)
+	ls "${G_PATCHES_DIR}"/*.patch > "${t_files}" 2>/dev/null
 	pushd "${G_KERNEL_SOURCE_FOLDER}" > /dev/null
-	for p in ${P} ; do
+	while IFS= read -r p ; do
 		local cve_id=$(echo "${p}" | sed -r -e "s|(CVE-[0-9]+-[0-9]+).*|\1|")
 		local p_abs_path="${p}"
 		einfo "Testing patch at ${p_path}"
@@ -1009,8 +1020,9 @@ generate_kpatch_modules() {
 			einfo "Kernel may not be vulnerable to ${cve_id}."
 		fi
 		echo -e "\n"
-	done
+	done < "${t_files}"
 	popd > /dev/null
+	rm "${t_files}"
 }
 
 get_tag() {
