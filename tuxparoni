@@ -86,7 +86,7 @@ G_MAX_YEAR="${G_MAX_YEAR_LIMIT}"
 G_DOWNLOAD_TOOL="curl" # can be wget or curl
 G_KERNEL_TIMESTAMP=0
 G_HTML2TEXT_WIDTH=320 # to avoid malformed patch
-G_TUXPARONI_URL_RESOLVER_HASH="ebd162e7fab9b01cbfe27ffe1ff0e9308574ac26beb1c97a119b8136d46ef6bd" #sha256
+G_TUXPARONI_URL_RESOLVER_HASH="070cfae6eca08d1287929a5a7cf5b3ead7f2fe9ea740434422ebe48461041dd0" #sha256
 G_UNATTENDED=0
 G_REQ_CLEAR_CACHE=0
 G_REQ_FETCH_JSONS=0
@@ -100,6 +100,7 @@ G_PATCH_DEFAULT_OPTIONS="-p1 -F 100"
 G_FEEDS_DIR=""
 G_JSONS_DIR=""
 G_PATCHES_DIR=""
+G_TEMP_DIR="/tmp"
 CVE_ALLOW_RISKY_BACKPORTS=${CVE_ALLOW_RISKY_BACKPORTS:=0}
 CVE_DELAY=${CVE_DELAY:=0}
 CVE_FIX_REJECT_DISPUTED=${CVE_FIX_REJECT_DISPUTED:=0}
@@ -137,6 +138,7 @@ Args:
 	-ca, --cmd-apply		applies patches
 	-mx, --max-year			sets max year to process
 	-mn, --min-year			sets min year to process
+	-t, --temp			sets the temp dir
 	--curl				downloads with curl (default)
 	--wget				downloads with wget
 	-h, --help			prints all the supported commands
@@ -654,8 +656,13 @@ download_patch() {
 	return 1
 }
 
+# this only reports based on configuration data
+report_cves_json_only() {
+
+}
+
 # this only reports if the patch was applied and doesn't consider CVEs without patches at the moment
-report_cves() {
+report_cves_patches_only() {
 	pushd "${G_KERNEL_SOURCE_FOLDER}" > /dev/null
 	# 2002
 	for y in $(seq ${G_MIN_YEAR} ${G_MAX_YEAR}) recent modified ; do
@@ -1080,6 +1087,10 @@ arg_parse() {
 				G_MIN_YEAR="${ARGS[0]}"
 				ARGS=("${ARGS[@]:1}")
 				;;
+			-t|--temp)
+				G_TEMP_DIR="${ARGS[0]}"
+				ARGS=("${ARGS[@]:1}")
+				;;
 			--curl)
 				G_DOWNLOAD_TOOL="curl"
 				;;
@@ -1249,6 +1260,10 @@ ${G_MAX_YEAR_LIMIT}"
 			fi
 		done
 	fi
+	if [[ ! -d "${G_TEMP_DIR}" ]] ; then
+		eerror "The temp directory is not set or doesn't exist.  See --help."
+		exit 1
+	fi
 }
 
 main() {
@@ -1320,7 +1335,8 @@ $(date -d "@${G_KERNEL_TIMESTAMP}")
 
 	[[ "${G_REQ_KPATCH_MODULES}" == "1" ]] && kpatch_combine
 
-	[[ "${G_REQ_REPORT}" == "1" ]] && report_cves
+	[[ "${G_REQ_REPORT}" == "1" ]] && report_cves_patches_only
+	[[ "${G_REQ_REPORT}" == "1" ]] && report_cves_json_only
 	[[ "${G_REQ_DRY_TEST}" == "1" ]] && drytest_cves
 	[[ "${G_REQ_BUILD_KPATCHES}" == "1" ]] && generate_kpatch_modules
 	[[ "${G_REQ_APPLY_PATCHES}" == "1" ]] && apply_patches

@@ -488,7 +488,8 @@ process_multipatch() {
 	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/multiple-issues-in-camera-drivers-cve-2014-9410-cve-2015-0568" \
 		&& "${cve_id}" == "CVE-2014-9410" ]] ; then
 		url="https://www.codeaurora.org/patches/quic/la/PATCH_8064_113026_check_vfe_cmd_usage_20150728.tar.gz"
-		rm -f "${G_TEMP_DIR}/PATCH_8064_113026_check_vfe_cmd_usage_20150728.tar.gz" > /dev/null
+		[[ -e "${G_TEMP_DIR}/PATCH_8064_113026_check_vfe_cmd_usage_20150728.tar.gz" ]] \
+			&& rm -f "${G_TEMP_DIR}/PATCH_8064_113026_check_vfe_cmd_usage_20150728.tar.gz" > /dev/null
 		download "${G_TEMP_DIR}/PATCH_8064_113026_check_vfe_cmd_usage_20150728.tar.gz" "${url}"
 		tar -xvf "${G_TEMP_DIR}/PATCH_8064_113026_check_vfe_cmd_usage_20150728.tar.gz"
 		mv "${G_TEMP_DIR}/msm.git-43b4ff3bf3fbb02e85defcea939629f46506a217.patch" "${src}"
@@ -499,7 +500,8 @@ process_multipatch() {
 	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/multiple-issues-in-camera-drivers-cve-2014-9410-cve-2015-0568" \
 		&& "${cve_id}" == "CVE-2015-0568" ]] ; then
 		url="https://www.codeaurora.org/patches/quic/la/PATCH_8064_113028_cropinfo_pointer_fix_20150728.tar.gz"
-		rm -f "${G_TEMP_DIR}/PATCH_8064_113028_cropinfo_pointer_fix_20150728.tar.gz" > /dev/null
+		[[ -e "${G_TEMP_DIR}/PATCH_8064_113028_cropinfo_pointer_fix_20150728.tar.gz" ]] \
+			&& rm -f "${G_TEMP_DIR}/PATCH_8064_113028_cropinfo_pointer_fix_20150728.tar.gz" > /dev/null
 		download "${G_TEMP_DIR}/PATCH_8064_113028_cropinfo_pointer_fix_20150728.tar.gz" "${url}"
 		tar -xvf "${G_TEMP_DIR}/PATCH_8064_113028_cropinfo_pointer_fix_20150728.tar.gz"
 		mv "${G_TEMP_DIR}/msm.git-8de3fe39e7c40190f82832253ed5946714e5bff1.patch" "${src}"
