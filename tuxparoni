@@ -77,6 +77,7 @@ PRODUCT="linux"
 G_CACHE_FOLDER="/var/cache/tuxparoni"
 G_CUSTOM_PATCHES_DIR="${G_CACHE_FOLDER}/custom_patches"
 G_KERNEL_SOURCE_FOLDER="/usr/src/linux"
+G_LOGS="${G_CACHE_FOLDER}/logs"
 G_KERNEL_TAG=""
 G_KERNEL_SOURCE_BIN=""
 G_MIN_YEAR_LIMIT="2002"
@@ -110,7 +111,7 @@ CVE_FIX_TRUST_LEVEL_DEFAULT=$((0x00000001 | 0x00000002 | 0x00010000 | 0x00020000
 | 0x01000000))
 CVE_FIX_TRUST_LEVEL=${CVE_FIX_TRUST_LEVEL:=${CVE_FIX_TRUST_LEVEL_DEFAULT}}
 G_PATCH_META_VERSION="1.0"
-G_VERSION="1.3.1"
+G_VERSION="1.3.2"
 
 EOK=0
 
@@ -722,7 +723,7 @@ report_cves_patches_only() {
 
 drytest_cves() {
 	einfo "Drytesting"
-	P=$(ls "${G_PATCHES_DIR}")
+	P=$(ls "${G_PATCHES_DIR}"/*.patch)
 	local c=0
 	local total=0
 	local bad_patches=0
@@ -741,30 +742,34 @@ drytest_cves() {
 			displayed_kernel_release=1
 		fi
 		cat /dev/null > "${t_out}"
-		# -f
 		local is_failed_at=0
 		local is_file_missing=0
 		local is_malformed=0
 		local is_previously_applied=0
 		local is_fuzzy_succeeded=0
+		local is_garbage=0
 		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
+			-i "${p}" 2>&1) \
 			| grep -q -F -e "succeeded at" && is_fuzzy_succeeded=1
 		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
+			-i "${p}" 2>&1) \
 			| grep -q -F -e "FAILED at" && is_failed_at=1
 		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
+			-i "${p}" 2>&1) \
 			| grep -q -F -e "can't find file" && is_file_missing=1
 		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
+			-i "${p}" 2>&1) \
 			| grep -q -F -e "malformed" && is_malformed=1
 		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
+			-i "${p}" 2>&1) \
 			| grep -q -F -e "Reversed (or previously applied)" \
 			&& is_previously_applied=1
+		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
+			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
+			| grep -q -F -e "Only garbage was found in the patch input." \
+			&& is_garbage=1
 		patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${G_PATCHES_DIR}/${p}" 2> /dev/null 1> /dev/null
+			-i "${p}" 2> /dev/null 1> /dev/null
 		local is_vulnerable="$?"
 		if [[ "${is_previously_applied}" == "1" \
 			&& "${is_fuzzy_succeeded}" != "1" \
@@ -773,16 +778,24 @@ drytest_cves() {
 			&& "${is_malformed}" != "1" ]]
 		then
 			echo -e "\e[42m\e[30m   Passed   \e[0m ${cve_id}"
+			echo -e "\e[42m\e[30m   Passed   \e[0m ${cve_id}" \
+			>> "${G_LOGS}/drytest"
 		elif [[ "${is_failed_at}" == "1" || "${is_file_missing}" == "1" ]] ; then
 			local h=$(sha256sum "${G_PATCHES_DIR}/${p}" | cut -f1 -d " ")
 			bad_ports=$((${bad_ports}+1))
 			echo -e \
-"\e[100m\e[97m  Bad port  \e[0m ${cve_id} sha256=${h} path=${G_PATCHES_DIR}/${p}"
-		elif [[ "${is_malformed}" == "1" ]] ; then
+"\e[100m\e[97m  Bad port  \e[0m ${cve_id}"
+			echo -e \
+"\e[100m\e[97m  Bad port  \e[0m ${cve_id} sha256=${h} path=${G_PATCHES_DIR}/${p}" \
+			>> "${G_LOGS}/drytest"
+		elif [[ "${is_malformed}" == "1" || "${is_garbage}" == "1" ]] ; then
 			local h=$(sha256sum "${G_PATCHES_DIR}/${p}" | cut -f1 -d " ")
 			bad_patches=$((${bad_patches}+1))
 			echo -e \
-"\e[100m\e[97m  Bad patch \e[0m ${cve_id} sha256=${h} path=${G_PATCHES_DIR}/${p}"
+"\e[100m\e[97m  Bad patch \e[0m ${cve_id}"
+			echo -e \
+"\e[100m\e[97m  Bad patch \e[0m ${cve_id} sha256=${h} path=${G_PATCHES_DIR}/${p}" \
+			>> "${G_LOGS}/drytest"
 		elif [[ "${is_vulnerable}" == "0" ]] ; then
 			echo -e "\e[41m Vulnerable \e[0m ${cve_id}"
 			c=$((c+1))
@@ -790,9 +803,16 @@ drytest_cves() {
 			local h=$(sha256sum "${G_PATCHES_DIR}/${p}" | cut -f1 -d " ")
 			# Try to avoid duplicate hunk problem
 			echo -e \
-"\e[100m\e[97m  Rejected  \e[0m ${cve_id} sha256=${h} path=${G_PATCHES_DIR}/${p} (hp)"
+"\e[100m\e[97m  Rejected  \e[0m ${cve_id}"
+			echo -e \
+"\e[100m\e[97m  Rejected  \e[0m ${cve_id} sha256=${h} path=${G_PATCHES_DIR}/${p} (dupe hunk problem avoidance)" \
+			>> "${G_LOGS}/drytest"
 		else
-			eerror "uncaught case"
+			eerror \
+"uncaught case is_failed_at=${is_failed_at} is_file_missing=${is_file_missing} \
+is_malformed=${is_malformed} is_previously_applied=${is_previously_applied} \
+is_fuzzy_succeeded=${is_fuzzy_succeeded} is_vulnerable=${is_vulnerable}"
+			eerror "Patch: ${G_PATCHES_DIR}/${p}"
 			exit 1
 		fi
 	done
@@ -876,7 +896,7 @@ conflict_resolver_default() {
 
 apply_patches() {
 	einfo "Applying"
-	P=$(ls "${G_PATCHES_DIR}")
+	P=$(ls "${G_PATCHES_DIR}"/*.patch)
 	local c=0
 	local total=0
 	local bad_patches=0
@@ -900,6 +920,7 @@ apply_patches() {
 		local is_malformed=0
 		local is_previously_applied=0
 		local is_fuzzy_succeeded=0
+		local is_garbage=0
 		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
 			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
 			| grep -q -F -e "succeeded at" && is_fuzzy_succeeded=1
@@ -916,6 +937,10 @@ apply_patches() {
 			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
 			| grep -q -F -e "Reversed (or previously applied)" \
 			&& is_previously_applied=1
+		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
+			-i "${G_PATCHES_DIR}/${p}" 2>&1) \
+			| grep -q -F -e "Only garbage was found in the patch input." \
+			&& is_garbage=1
 		patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
 			-i "${G_PATCHES_DIR}/${p}" 2> /dev/null 1> /dev/null
 		local is_vulnerable="$?"
@@ -929,7 +954,7 @@ apply_patches() {
 		elif [[ "${is_failed_at}" == "1" || "${is_file_missing}" == "1" ]] ; then
 			bad_ports=$((${bad_ports}+1))
 			echo -e "\e[100m\e[97m  Bad port  \e[0m ${cve_id} file=${G_PATCHES_DIR}/${p}"
-		elif [[ "${is_malformed}" == "1" ]] ; then
+		elif [[ "${is_malformed}" == "1" || "${is_garbage}" == "1" ]] ; then
 			bad_patches=$((${bad_patches}+1))
 			echo -e "\e[100m\e[97m  Bad patch \e[0m ${cve_id} file=${G_PATCHES_DIR}/${p}"
 		elif [[ "${is_vulnerable}" == "0" ]] ; then
@@ -969,7 +994,7 @@ hunks involved"
 }
 
 generate_kpatch_modules() {
-	P=$(ls "${G_PATCHES_DIR}")
+	P=$(ls "${G_PATCHES_DIR}"/*.patch)
 	pushd "${G_KERNEL_SOURCE_FOLDER}" > /dev/null
 	for p in ${P} ; do
 		local cve_id=$(echo "${p}" | sed -r -e "s|(CVE-[0-9]+-[0-9]+).*|\1|")
@@ -1023,6 +1048,7 @@ setup_cache() {
 	_merged_mkdir "${G_FEEDS_DIR}"
 	_merged_mkdir "${G_JSONS_DIR}"
 	_merged_mkdir "${G_PATCHES_DIR}"
+	_merged_mkdir "${G_LOGS}"
 }
 
 clear_cache() {
@@ -1031,6 +1057,7 @@ clear_cache() {
 	rm -rf "${G_FEEDS_DIR}"
 	rm -rf "${G_JSONS_DIR}"
 	rm -rf "${G_PATCHES_DIR}"
+	rm -rf "${G_LOGS}"
 }
 
 arg_parse() {
