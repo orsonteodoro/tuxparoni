@@ -402,6 +402,9 @@ fix_direct_download() {
 	[[ "${url}" == "https://lore.kernel.org/lkml/20191001165611.GA3542072@kroah.com/raw" ]] \
 		&& url="https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/patch/?id=bbe837675455975d4a52ccfcc47006107b12a893"
 
+	[[ "${url}" == "https://git.kernel.org/pub/scm/linux/kernel/git/chris/linux.git/patch/?id=13788ccc41ceea5893f9c747c59bc0b28f2416c2" ]] \
+		&& url="https://github.com/torvalds/linux/commit/13788ccc41ceea5893f9c747c59bc0b28f2416c2.patch"
+
 	#[[ "${url}" == "" ]] \
 	#	&& url=""
 
