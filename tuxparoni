@@ -735,15 +735,15 @@ queue_urls() {
 		for i in $(seq 0 $((${reference_data_length}-1))) ; do
 			local is_direct_url="0"
 			local is_substituted_url="0"
+			local original_url=$(jq \
+				".[].cve.references.reference_data[${i}].url" \
+				"${json_file}" \
+				| sed -e "s|\"||g")
 			if [[ "${is_patchable}" == "1" ]] ; then
 				local tags=$(jq \
 				".[].cve.references.reference_data[${i}].tags" \
 						"${json_file}")
 				if [[ "${tags}" =~ (Patch|Vendor Advisory) ]] ; then
-					local original_url=$(jq \
-					".[].cve.references.reference_data[${i}].url" \
-							"${json_file}" \
-							| sed -e "s|\"||g")
 					get_patch_direct_link "${original_url}" "${cve_id}"
 					download_url="${url}"
 					[[ "${original_url}" == "${download_url}" ]] \
@@ -755,13 +755,9 @@ queue_urls() {
 					queue_patch "${download_url}" "${cve_id}"
 				fi
 			elif [[ "${G_ALLOW_UNTAGGED_COMMITS}" == "1" && \
-				( "${url}" =~ ("github.com/torvalds"|"kernel.org") ) ]]
+				( "${original_url}" =~ ("github.com/torvalds"|"kernel.org") ) ]]
 			then
 				request_inspection=1
-				local original_url=$(jq \
-				".[].cve.references.reference_data[${i}].url" \
-					"${json_file}" \
-					| sed -e "s|\"||g")
 				get_patch_direct_link "${original_url}" "${cve_id}"
 				download_url="${url}"
 				[[ "${original_url}" == "${download_url}" ]] \
