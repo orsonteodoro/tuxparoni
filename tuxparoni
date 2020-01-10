@@ -753,8 +753,11 @@ queue_urls() {
 					[[ "${l1}" == "${l2}" ]] \
 						&& is_direct_url="1"
 					queue_patch "${download_url}" "${cve_id}"
+					continue
 				fi
-			elif [[ "${G_ALLOW_UNTAGGED_COMMITS}" == "1" && \
+			fi
+
+			if [[ "${G_ALLOW_UNTAGGED_COMMITS}" == "1" && \
 				( "${original_url}" =~ ("github.com/torvalds"|"kernel.org") ) ]]
 			then
 				request_inspection=1
@@ -767,7 +770,10 @@ queue_urls() {
 				[[ "${l1}" == "${l2}" ]] \
 					&& is_direct_url="1"
 				queue_patch "${download_url}" "${cve_id}"
-			else
+				continue
+			fi
+
+			if [[ "${is_patchable}" == "0" ]] ; then
 				echo -e "\e[101m\e[30m Unpatchable \e[0m ${cve_id}"
 				is_patch_processable=0
 				save_test_meta
