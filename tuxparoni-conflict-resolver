@@ -1,1 +1,8 @@
 # This module is a placeholder.  It should used to apply custom backports.
+
+conflict_resolver() {
+	:;
+	# see conflict_resolver_default in main tuxparoni script
+	# or https://github.com/orsonteodoro/oiledmachine-overlay/blob/master/sys-kernel/ot-sources/files/tuxparoni-conflict-resolver
+	# in how to implement your own
+}
