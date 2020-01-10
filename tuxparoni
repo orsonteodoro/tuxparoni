@@ -2071,7 +2071,7 @@ clear_downloads() {
 }
 
 _dependency_fail() {
-	if [[ -z "${2}" ]] ; then
+	if [[ -n "${2}" ]] ; then
 		eerror "You are missing the ${1} command from the package ${2}."
 	else
 		eerror "You are missing the ${1} command."
