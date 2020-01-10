@@ -118,7 +118,7 @@ CVE_FIX_TRUST_LEVEL_DEFAULT=$((0x00000001 | 0x00000002 | 0x00010000 \
 CVE_FIX_TRUST_LEVEL=${CVE_FIX_TRUST_LEVEL:=${CVE_FIX_TRUST_LEVEL_DEFAULT}}
 G_ALLOW_CRASH_PREVENTION="0"
 G_PATCH_META_VERSION="1.1.2"
-G_VERSION="1.4.2"
+G_VERSION="1.4.3"
 G_MAX_BULK_CONNECTIONS=5 # for bulk transfers
 G_MAX_PATCH_CONNECTIONS=100 # should be X KiB bandwidth divided by 3 KiB patch for max throughput, assumed 128KiB
 G_CORES=""
@@ -260,9 +260,8 @@ _download_feeds() {
 
 is_feed_accepted() {
 	if [[ "${y}" == "recent" || "${y}" == "modified" ]] ; then
-		(( 2007 <= ${G_MIN_YEAR} && ${G_MIN_YEAR} <= ${G_CURRENT_YEAR} && \
-		   2007 <= ${G_MAX_YEAR} && ${G_MAX_YEAR} <= ${G_CURRENT_YEAR} )) && \
-			return 0
+		(( ${G_MAX_YEAR} >= 2007 )) \
+			&& return 0
 	else
 		(( ${G_MIN_YEAR} <= ${y} && ${y} <= ${G_MAX_YEAR} )) \
 			&& return 0
