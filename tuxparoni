@@ -757,8 +757,9 @@ queue_urls() {
 				fi
 			fi
 
-			if [[ "${G_ALLOW_UNTAGGED_COMMITS}" == "1" && \
-				( "${original_url}" =~ ("github.com/torvalds"|"kernel.org") ) ]]
+			if [[ "${G_ALLOW_UNTAGGED_COMMITS}" == "1" \
+				&& ( "${original_url}" =~ ("github.com/torvalds"|"kernel.org") ) \
+				&& ( "${original_url}" =~ (h=[0-9a-z]{40}|"/patch/") ) ]]
 			then
 				request_inspection=1
 				get_patch_direct_link "${original_url}" "${cve_id}"
