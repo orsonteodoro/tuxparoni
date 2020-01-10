@@ -2070,7 +2070,44 @@ clear_downloads() {
 		&& rm "${G_CACHE_FOLDER}/download_list"
 }
 
+_dependency_fail() {
+	if [[ -z "${2}" ]] ; then
+		eerror "You are missing the ${1} command from the package ${2}."
+	else
+		eerror "You are missing the ${1} command."
+	fi
+	exit 1
+}
+
+check_dependencies() {
+	if [[ "${G_DOWNLOAD_TOOL}" == "wget" ]] ; then
+		which wget || _dependency_fail "wget"
+	else
+		which wget || _dependency_fail "curl"
+	fi
+	which jq || _dependency_fail "jq"
+	which pcregrep || _dependency_fail "pcregrep" "libpcre"
+	which grep || _dependency_fail "grep"
+	if echo "lol" | ./grep -P "lol" 2>&1 \
+		| grep -q -F -e "support for the -P option is not compiled" ; then
+		eerror "Compile/download grep with Perl regular expression support from your package manager."
+		exit 1
+	fi
+	which html2text || _dependency_fail "html2text"
+	which gunzip || _dependency_fail "gunzip" "gzip"
+	which filterdiff || _dependency_fail "filterdiff" "patchutils"
+	which xargs || _dependency_fail "xargs" "findutils"
+	bash_version=$(echo "${$BASH_VERSION}" \
+		| grep -o -E -e "version [0-9\.]+" \
+		| sed -e "s|version ||g" | head -n 1)
+	if is_x_le_y "${bash_version}" "4.0" ; then
+		eerror "You need Bash >= 4.0"
+		exit 1
+	fi
+}
+
 main() {
+	check_dependencies
 	einfo "Project is still WIP"
 
 	arg_parse
