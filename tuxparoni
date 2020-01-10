@@ -88,7 +88,8 @@ G_MAX_YEAR="${G_MAX_YEAR_LIMIT}"
 G_DOWNLOAD_TOOL="wget" # can be wget or curl
 G_KERNEL_TIMESTAMP=0
 G_HTML2TEXT_WIDTH=320 # to avoid malformed patch
-G_TUXPARONI_URL_RESOLVER_HASH="74889d423e5e4a56c5deea9fa504b7ab3b176f7130c5875136cb6b18172a4f52" # sha256
+G_TUXPARONI_URL_RESOLVER_HASH=\
+"74889d423e5e4a56c5deea9fa504b7ab3b176f7130c5875136cb6b18172a4f52" # sha256
 G_UNATTENDED=0
 G_REQ_CLEAR_CACHE=0
 G_REQ_FETCH_JSONS=0
@@ -1233,9 +1234,16 @@ report_cves_patches_only() {
 			einfo "${cve_id} skipped"
 		fi
 	done
-	einfo "Skipped:  This means that it could be a bad patch, bad backport, bad forward port."
-	einfo "Vulnerable: possibly yes, false positive possible:  This means that the patch applied without problems."
-	einfo "Vulnerable: yes, no known patch exists:  This means no patch file was provided to resolve the CVE by the security community or by the module maintainer."
+	einfo \
+"Skipped:  This means that it could be a bad patch, bad backport, bad forward \
+port."
+	einfo \
+"Vulnerable: possibly yes, false positive possible:  This means that the \
+patch applied without problems."
+	einfo \
+"Vulnerable: yes, no known patch exists:  This means no patch file was \
+provided to resolve the CVE by the security community or by the module \
+maintainer."
 	popd > /dev/null
 }
 
@@ -1674,13 +1682,15 @@ apply_patches() {
 				patch ${G_PATCH_DEFAULT_OPTIONS} \
 					-i "${p}" 2> /dev/null 1> /dev/null
 			else
-				echo -e "\e[100m\e[97m  Rejected  \e[0m ${cve_id} (unauthorized) ${p}"
+				echo -e \
+"\e[100m\e[97m  Rejected  \e[0m ${cve_id} (unauthorized) ${p}"
 			fi
 			c=$((c+1))
 		elif [[ "${is_previously_applied}" == 1 ]] ; then
 			# Try to avoid duplicate hunk problem that
 			# could cause overflows, underflows, crashes
-			echo -e "\e[100m\e[97m  Rejected  \e[0m ${cve_id} (dupe hunk problem avoidance) file=${p}"
+			echo -e \
+"\e[100m\e[97m  Rejected  \e[0m ${cve_id} (dupe hunk problem avoidance) file=${p}"
 		else
 			eerror "uncaught case"
 			rm "${t_out}"
@@ -1710,9 +1720,11 @@ generate_kpatch_modules() {
 		local cve_id=$(echo "${p}" | sed -r -e "s|(CVE-[0-9]+-[0-9]+).*|\1|")
 		local p_abs_path="${p}"
 		einfo "Testing patch at ${p_path}"
-		patch -f --dry-run ${G_PATCH_DEFAULT_OPTIONS} -i "${p_abs_path}" 2>&1 > /dev/null
+		patch -f --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
+			-i "${p_abs_path}" 2>&1 > /dev/null
 		if [[ "$?" == "0" ]] ; then
-			ewarn "Kernel may be vulnerable to ${cve_id}.  Generating live patch."
+			ewarn \
+"Kernel may be vulnerable to ${cve_id}.  Generating live patch."
 			kpatch-build -t "${G_KERNEL_SOURCE_BIN}" "${p_abs_path}"
 		else
 			einfo "Kernel may not be vulnerable to ${cve_id}."
@@ -2056,7 +2068,8 @@ main() {
 			&& need_wipe=1
 		[[ "${X_PATCH_META_VERSION}" != "${G_PATCH_META_VERSION}" ]] \
 			&& need_wipe=1
-		[[ "${X_TUXPARONI_URL_RESOLVER_HASH}" != "${G_TUXPARONI_URL_RESOLVER_HASH}" ]] \
+		[[ "${X_TUXPARONI_URL_RESOLVER_HASH}" \
+			!= "${G_TUXPARONI_URL_RESOLVER_HASH}" ]] \
 			&& need_wipe=1
 	else
 		need_wipe=1
