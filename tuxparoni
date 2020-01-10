@@ -79,15 +79,16 @@ G_KERNEL_SOURCE_FOLDER="/usr/src/linux"
 G_CUSTOM_PATCHES_DIR="${G_CACHE_FOLDER}/custom_patches"
 G_LOGS="${G_CACHE_FOLDER}/logs"
 G_KERNEL_TAG=""
+G_KERNEL_VER=""
 G_KERNEL_SOURCE_BIN=""
 G_MIN_YEAR_LIMIT="2002"
 G_MAX_YEAR_LIMIT="2019"
 G_MIN_YEAR="${G_MIN_YEAR_LIMIT}" # 2002 inclusive is the earliest, 2015 is year linux 4.0 was released
 G_MAX_YEAR="${G_MAX_YEAR_LIMIT}"
-G_DOWNLOAD_TOOL="curl" # can be wget or curl
+G_DOWNLOAD_TOOL="wget" # can be wget or curl
 G_KERNEL_TIMESTAMP=0
 G_HTML2TEXT_WIDTH=320 # to avoid malformed patch
-G_TUXPARONI_URL_RESOLVER_HASH="070cfae6eca08d1287929a5a7cf5b3ead7f2fe9ea740434422ebe48461041dd0" #sha256
+G_TUXPARONI_URL_RESOLVER_HASH="74889d423e5e4a56c5deea9fa504b7ab3b176f7130c5875136cb6b18172a4f52" # sha256
 G_UNATTENDED=0
 G_REQ_CLEAR_CACHE=0
 G_REQ_FETCH_JSONS=0
@@ -100,18 +101,28 @@ G_REQ_BUILD_KPATCHES=0
 G_PATCH_DEFAULT_OPTIONS="-p1 -F 100"
 G_FEEDS_DIR=""
 G_JSONS_DIR=""
+G_SPLIT_JSONS_DIR=""
 G_PATCHES_DIR=""
 G_TEMP_DIR="/tmp"
+G_ALLOW_UNTAGGED_COMMITS="0" # only from kernel.org or github.com/torvalds,
+			     # the commit will mention the cve but not
+			     # explicitly say it is a fix or notices a flaw
 CVE_ALLOW_RISKY_BACKPORTS=${CVE_ALLOW_RISKY_BACKPORTS:=0}
 CVE_DELAY=${CVE_DELAY:=0}
 CVE_FIX_REJECT_DISPUTED=${CVE_FIX_REJECT_DISPUTED:=0}
 CVE_LANG=${CVE_LANG:=en}
-CVE_FIX_TRUST_LEVEL_DEFAULT=$((0x00000001 | 0x00000002 | 0x00010000 | 0x00020000 | 0x00040000 \
+CVE_FIX_TRUST_LEVEL_DEFAULT=$((0x00000001 | 0x00000002 | 0x00010000 \
+| 0x00020000 | 0x00040000 \
 | 0x00080000 | 0x04000000 | 0x01000000 | 0x01000000 \
 | 0x01000000))
 CVE_FIX_TRUST_LEVEL=${CVE_FIX_TRUST_LEVEL:=${CVE_FIX_TRUST_LEVEL_DEFAULT}}
-G_PATCH_META_VERSION="1.0"
-G_VERSION="1.3.2"
+G_ALLOW_CRASH_PREVENTION="0"
+G_PATCH_META_VERSION="1.1.2"
+G_VERSION="1.4.2"
+G_MAX_BULK_CONNECTIONS=5 # for bulk transfers
+G_MAX_PATCH_CONNECTIONS=100 # should be X KiB bandwidth divided by 3 KiB patch for max throughput, assumed 128KiB
+G_CORES=""
+G_CURRENT_YEAR="2020"
 
 EOK=0
 
@@ -132,6 +143,8 @@ Args:
 	-s, --kernel-src		points to kernel sources location (e.g. /usr/src/linux)
 	-g, --generate-kpatch-modules	generates kpatch modules
 	-u,  --unattended		runs unattended
+	-au, --allow-untagged		allows untagged commits from kernel.org or from github.com/torvalds
+	-acp, --allow-crash-prevention  allows crash prevention commits
 	-cj, --cmd-fetch-jsons		fetches, unpacks, filter NVD JSONs
 	-cp, --cmd-fetch-patches	fetches, dedupes, tidys commits or patches
 	-ct, --cmd-dry-test		does a dry run per CVE patch to determine if sources are vulunerable
@@ -161,7 +174,6 @@ Environmental variables:
 		0x00080000 - major distro reviewed
 		0x04000000 - major distro team suggested
 		0x01000000 - tuxparoni patches
-		0x01000000 - tuxparoni addendum class A
 		0x01000000 - FOSS contributor
 		0x10000000 - OSS contributor
 		0x80000000 - patron
@@ -192,24 +204,16 @@ was partly obtained from MITRE.
 source "${DIR}/tuxparoni-url-resolver"
 source "${DIR}/tuxparoni-conflict-resolver"
 
-G_LAST_URL=""
-download() {
-	G_LAST_URL="${2}"
-	if [[ "$2" =~ ^defunct \
-	      || "$2" =~ ^banned \
-	      || "$2" =~ ^flaw \
-	      || "$2" =~ ^info ]] ; then
-		return
-	fi
-	if [[ "${G_DOWNLOAD_TOOL}" == "curl" ]] ; then
-		curl -s -L -C - -o $1 $2
-		(( "$?" == 56 || "$?" == 55 )) \
-			&& eerror "Network dead?  Stopping." && exit 1
-	else
-		wget -q -c -O $1 $2
-		(( "$?" == 4 )) \
-			&& eerror "Network dead?  Stopping." && exit 1
-	fi
+# data structure agnostic
+enqueue_download() {
+	local url="${1}"
+	local cve_id="${2}"
+	noprefix_url=$(echo "${url}" \
+		| sed -r -e "s#^(flaw|defunct|banned|info):[ ]*##")
+	echo -e "\e[46m\e[30m    Queued   \e[0m ${cve_id} ${noprefix_url}"
+	save_download_meta
+	echo "${cve_id} ${url}" >> "${G_CACHE_FOLDER}/download_list"
+	_reset_tags
 }
 
 einfo() {
@@ -236,92 +240,215 @@ eerrorw() {
 	echo -e "\e[31m*\e[0m $*" | fold -s -w 80
 }
 
+_download_feeds() {
+	local P=()
+	if [[ "${G_DOWNLOAD_TOOL}" == "curl" ]] ; then
+		echo -e "${F}" | xargs -I '{}' -P ${G_MAX_BULK_CONNECTIONS} \
+			curl -s -L -C - -o "${G_FEEDS_DIR}/{}" "${rdl_folder}/{}"
+	else
+		echo -e "${F}" | xargs -I '{}' -P ${G_MAX_BULK_CONNECTIONS} \
+			wget -q -c -O "${G_FEEDS_DIR}/{}" "${rdl_folder}/{}"
+	fi
+	P+=($!)
+
+	einfo "Download feeds in the background in parallel.  Waiting..."
+
+	for p in ${P[@]} ; do
+		wait $p
+	done
+}
+
+is_feed_accepted() {
+	if [[ "${y}" == "recent" || "${y}" == "modified" ]] ; then
+		(( 2007 <= ${G_MIN_YEAR} && ${G_MIN_YEAR} <= ${G_CURRENT_YEAR} && \
+		   2007 <= ${G_MAX_YEAR} && ${G_MAX_YEAR} <= ${G_CURRENT_YEAR} )) && \
+			return 0
+	else
+		(( ${G_MIN_YEAR} <= ${y} && ${y} <= ${G_MAX_YEAR} )) \
+			&& return 0
+	fi
+	return 1
+}
+
 fetch_feeds() {
 	einfo "Fetching feeds"
 	local rdl_folder="https://nvd.nist.gov/feeds/json/cve/${NVD_JSON_SCHEMA_VERSION}/"
+	local F=""
 	for y in $(seq ${G_MIN_YEAR} ${G_MAX_YEAR}) recent modified ; do
-		download "${G_FEEDS_DIR}/nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json.gz" \
-			"${rdl_folder}/nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json.gz"
-		download "${G_FEEDS_DIR}/nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.meta" \
-			"${rdl_folder}/nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.meta"
-		local expected_sz=$(grep "gzSize" \
+		is_feed_accepted || continue
+		if [[ "${y}" == "${G_MIN_YEAR}" ]] ; then
+			F="nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json.gz\nnvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.meta"
+		else
+			F="${F}\nnvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json.gz\nnvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.meta"
+		fi
+	done
+
+	local retries=0
+	local failed=0
+	while true ; do
+		failed=0
+		_download_feeds
+		for y in $(seq ${G_MIN_YEAR} ${G_MAX_YEAR}) recent modified ; do
+			is_feed_accepted || continue
+			if ! gunzip -t "${G_FEEDS_DIR}/nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json.gz" ; then
+				failed=1
+			fi
+		done
+		if (( ${failed} == 1 && retries <= 3 )) ; then
+			retries=$((${retries}+1))
+			echo -e \
+"\e[41m\e[30m Retrying \e[0m nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json.gz (${failed})"
+			continue
+		elif (( ${failed} == 0  )) ; then
+			break
+		else
+			for y in $(seq ${G_MIN_YEAR} ${G_MAX_YEAR}) recent modified ; do
+				is_feed_accepted || continue
+				if ! gunzip -t "${G_FEEDS_DIR}/nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json.gz" ; then
+					echo -e
+"\e[41m\e[30m  Failed  \e[0m \
+${G_FEEDS_DIR}/nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json.gz \
+failed the integrity test.  Remove it and try again."
+					exit 1
+				fi
+			done
+		fi
+	done
+
+	for y in $(seq ${G_MIN_YEAR} ${G_MAX_YEAR}) recent modified ; do
+		is_feed_accepted || continue
+		local expected_sz=$(grep -F -e "gzSize" \
 			"${G_FEEDS_DIR}/nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.meta" \
-			| cut -f2 -d ":" | sed -e "s|[^0-9]||g")
+			| cut -f2 -d ":" | sed -r -e "s|[^0-9]||g")
 		local x_sz=$(wc -c \
 			"${G_FEEDS_DIR}/nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json.gz" \
 			| cut -f1 -d " ")
+		if [[ ! -f "${G_FEEDS_DIR}/nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.meta" ]] ; then
+			echo -e \
+"\e[41m\e[30m  Missing \e[0m nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.meta missing."
+		fi
+		if [[ ! -f "${G_FEEDS_DIR}/nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json.gz" ]] ; then
+			echo -e \
+"\e[41m\e[30m  Missing \e[0m nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.meta missing."
+		fi
 		if [[ "${expected_sz}" != "${x_sz}" && "${expected_h}" != "${x_h}" ]] ; then
 			echo -e \
-"\e[41m\e[30m Failed \e[0m nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json.gz.  Clear cache."
+"\e[41m\e[30m  Failed  \e[0m nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json.gz.  Clear cache."
 			exit 1
 		fi
-		echo -e "\e[42m\e[30m Success \e[0m nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json.gz"
+		echo -e "\e[42m\e[30m  Success \e[0m nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json.gz"
 	done
 }
 
 unpack_feeds() {
 	einfo "Unpacking feeds"
+
+	local L=""
+	for y in $(seq ${G_MIN_YEAR} ${G_MAX_YEAR}) recent modified ; do
+		is_feed_accepted || continue
+		if [[ "${L}" == "${G_MIN_YEAR}" ]] ; then
+			L="${y}"
+		else
+			L="${L}\n${y}"
+		fi
+	done
+
+	local P=()
 	pushd "${G_FEEDS_DIR}" > /dev/null
-		for y in $(seq ${G_MIN_YEAR} ${G_MAX_YEAR}) recent modified ; do
+		echo -e "${L}" | xargs -I '{}' -P ${G_CORES} \
 			gunzip -q -f -k \
-			nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json.gz
-			local expected_sz=$(grep "size" \
-				"${G_FEEDS_DIR}/nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.meta" \
-				| cut -f2 -d ":" | sed -e "s|[^0-9]||g")
-			local x_sz=$(wc -c \
-				"${G_FEEDS_DIR}/nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json" \
-				| cut -f1 -d " ")
-			local expected_h=$(grep "sha256" \
-				"${G_FEEDS_DIR}/nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.meta" \
-				| cut -f2 -d ":" | sed -e "s|[^0-9A-Z]||g")
-			expected_h=${expected_h,,}
-			local x_h=$(sha256sum \
-				"${G_FEEDS_DIR}/nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json" \
-				| cut -f1 -d " ")
-			if [[ "${expected_sz}" != "${x_sz}" && "${expected_h}" != "${x_h}" ]] ; then
-				echo -e \
-"\e[41m\e[30m Failed \e[0m nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json.  Clear cache."
-				exit 1
-			fi
-			echo -e "\e[42m\e[30m Success \e[0m nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json"
-		done
+			nvdcve-${NVD_JSON_SCHEMA_VERSION}-{}.json.gz
+		P+=($!)
 	popd > /dev/null
+
+	einfo "Unpacking feeds in the background in parallel.  Waiting..."
+
+	for p in ${P[@]} ; do
+		wait $p
+	done
+
+	for y in $(seq ${G_MIN_YEAR} ${G_MAX_YEAR}) recent modified ; do
+		is_feed_accepted || continue
+		local expected_sz=$(grep -F -e "size" \
+			"${G_FEEDS_DIR}/nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.meta" \
+			| cut -f2 -d ":" | sed -r -e "s|[^0-9]||g")
+		local x_sz=$(wc -c \
+			"${G_FEEDS_DIR}/nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json" \
+			| cut -f1 -d " ")
+		local expected_h=$(grep -F -e "sha256" \
+			"${G_FEEDS_DIR}/nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.meta" \
+			| cut -f2 -d ":" | sed -r -e "s|[^0-9A-Z]||g")
+		expected_h=${expected_h,,}
+		local x_h=$(sha256sum \
+			"${G_FEEDS_DIR}/nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json" \
+			| cut -f1 -d " ")
+		if [[ "${expected_sz}" != "${x_sz}" && "${expected_h}" != "${x_h}" ]] ; then
+			echo -e \
+"\e[41m\e[30m Failed \e[0m nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json.  Clear cache."
+			exit 1
+		fi
+		echo -e "\e[42m\e[30m Success \e[0m nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json"
+	done
 }
 
-filter_jsons() {
-	einfo "Filtering JSONs"
+# split to reduce search space and more efficient loading time into jq
+split_jsons() {
+	einfo "Spliting JSONs"
 	for y in $(seq ${G_MIN_YEAR} ${G_MAX_YEAR}) recent modified ; do
-		json_file="${G_JSONS_DIR}/nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json"
-		jq "[.\"CVE_Items\"[] | {cveid:.cve.CVE_data_meta.ID, \
-			desc: .cve.description.description_data[0].value, \
-			severity3: .impact.baseMetricV3.cvssV3.baseSeverity, \
-			severity2: .impact.baseMetricV2.severity, \
-			refdata: .cve.references.reference_data[]} \
-		    ] \
-			| map(select( (contains({desc:\"linux\"}) \
-				or contains({desc:\"Linux\"}) \
-				or contains({desc:\"LiNUX\"}) \
-				or contains({desc:\"LINUX\"}) \
-			              ) \
-			and (contains({desc:\"kernel\"}) \
-				or contains({desc:\"Kernel\"}) \
-				or contains({desc:\"KERNEL\"}) \
-			    ) \
-			and contains({refdata: {tags: [\"Patch\"]}}) \
-				      ) \
-			     )" \
-			"${G_FEEDS_DIR}/nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json" \
-			> "${json_file}"
-		echo -e "\e[42m\e[30m Done \e[0m ${y}"
+		is_feed_accepted || continue
+		local feed_json="${G_FEEDS_DIR}/nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json"
+		einfo "Processing ${y}"
+
+		# reduce the space in one pass
+		json_frag=$(tempfile)
+		jq "[.CVE_Items[]] \
+			| map(select(contains({cve:{description:{description_data:[{value:\"linux kernel\"}]}}}) or \
+			contains({cve:{description:{description_data:[{value:\"Linux kernel\"}]}}}) or \
+			contains({cve:{description:{description_data:[{value:\"Linux Kernel\"}]}}}) or \
+			contains({cve:{description:{description_data:[{value:\"Linux Driver\"}]}}}) ))" "${feed_json}" \
+			> "${json_frag}"
+
+		local C=$(jq ".[].cve.CVE_data_meta.ID" "${json_frag}" | sed -e "s|\"||g")
+
+		Y=$(seq ${G_MIN_YEAR} ${G_MAX_YEAR} | tr "\n" "|" | sed -r -e "s|[\|]$||")
+		C=$(echo -e "${C}" | grep -P -e "CVE-(${Y})-[0-9]+")
+
+		local P=()
+
+		echo -e "${C}" | xargs -I '{}' -P ${G_CORES} \
+			bash -c "jq \
+	'[.[]] | map(select(contains({cve:{CVE_data_meta:{ID:\"{}\"}}})))' \
+				'${json_frag}' \
+				> '${G_SPLIT_JSONS_DIR}/{}.json'"
+
+		P+=$($!)
+
+		einfo "Splitting in parallel... waiting..."
+
+		for p in ${P[@]} ; do
+			wait $p
+		done
+
+		rm "${json_frag}"
+
+		for c in $C ; do
+			if [[ -f "${G_SPLIT_JSONS_DIR}/${c}.json" ]] ; then
+				echo -e "\e[42m\e[30m Done \e[0m ${c}"
+			else
+				echo -e "\e[42m\e[30m Fail \e[0m ${c}"
+				exit 1
+			fi
+		done
 	done
+	einfo "Done splitting jsons"
 }
 
 # use CVSS v3 (four levels) but fall back to v2 (three levels)
 get_severity() {
-	local severity3=$(jq "[.[]] | .[${i}].severity3" "${json_file}" \
-		| sed -r -e "s|\"||g")
-	local severity2=$(jq "[.[]] | .[${i}].severity2" "${json_file}" \
-		| sed -r -e "s|\"||g")
+	local severity3=$(jq ".[0].impact.baseMetricV3.cvssV3.baseSeverity" "${json_file}" \
+		| sed -e "s|\"||g")
+	local severity2=$(jq ".[0].impact.baseMetricV2.severity" "${json_file}" \
+		| sed -e "s|\"||g")
 	if [[ "${severity3}" != "null" ]] ; then
 		severity="${severity3}"
 	elif [[ "${severity2}" != "null" ]] ; then
@@ -332,27 +459,152 @@ get_severity() {
 	echo "${severity}"
 }
 
+# context is _process_patch
+save_test_meta() {
+	# for drytest, report, and filtering drivers/subsystems for
+	# custom hardware setups
+	local meta_path="${G_PATCHES_DIR}/${dest_fn_base}.meta"
+	if [[ -f "${meta_path}" ]] ; then
+		#don't clobbler
+		return
+	fi
+	echo "meta_version: ${G_PATCH_META_VERSION}" > "${meta_path}"
+	echo "cve_id: ${cve_id}" >> "${meta_path}"
+	echo "severity: ${severity}" >> "${meta_path}"
+	echo "timestamp: ${timestamp}" >> "${meta_path}"
+	[[ -n "${original_url}" ]] \
+		&& echo "original_url: ${original_url}" >> "${meta_path}"
+	[[ -n "${url}" ]] \
+		&& echo "download_url: ${url}" >> "${meta_path}"
+	echo "is_patch_processable: ${is_patch_processable}" >> "${meta_path}"
+	echo "is_direct_url: ${is_direct_url}" >> "${meta_path}"
+	echo "is_disputed: ${is_disputed}" >> "${meta_path}"
+	echo "is_substituted_url: ${is_substituted_url}" >> "${meta_path}"
+        if [[ -n "${htags}" ]] ; then
+                # hidden tags for controlling backports or anything
+                echo "htags: ${htags}" >> "${meta_path}"
+        fi
+	if [[ "${is_patch_processable}" == "1" ]] ; then
+		echo "subject: ${subject_raw}" >> "${meta_path}"
 
-# required preconditions: src, dest, cve_id, PRODUCT, module, url all must be filled prior
-# optional preconditions: subject, tag1, tag2
+		[[ -n "${tag1}" ]] \
+			&& echo "tag1: ${tag1}" >> "${meta_path}"
+		[[ -n "${tag2}" ]] \
+			&& echo "tag2: ${tag2}" >> "${meta_path}"
+		[[ -n "${tag3}" ]] \
+			&& echo "tag3: ${tag3}" >> "${meta_path}"
+		[[ -n "${index}" ]] \
+			&& echo "index: ${index}" >> "${meta_path}"
+		# can be used to filter for device drivers
+		local files=$(cat "${dest}" | grep -P -e "^[+-]{3} " \
+			| cut -c 5- | sed -r -e "s|^[a,b]/||g" | uniq \
+			| cut -f1 -d $' ' | cut -f1 -d $'\t' | tr "\n" " ")
+		echo "files: ${files}" >> "${meta_path}"
+		echo "dest_fn_base: ${dest_fn_base}" >> "${meta_path}"
+	fi
+}
+
+# required preconditions: url (final download url used as the key),
+#			  pickled metadata generated from save_download_meta
 _process_patch() {
-	local is_processable=0
+	local cve_id="${2}"
+	local htags=""
+	local index=""
+	local is_direct_url=""
+	local is_disputed=""
+	local is_substituted_url=""
+	local original_url=""
+	local request_inspection=""
+	local severity=""
+	local src=""
+	local tag1=""
+	local tag2=""
+	local tag3=""
+	local timestamp=0
+	local url="${1}"
+
+	[[ -z "${url}" ]] && return
+
+	restore_download_meta
+
+	if declare -f pre_process_patch > /dev/null ; then
+		pre_process_patch "${url}" "${cve_id}" "${src}"
+	fi
+
+	local is_patch_processable=0
+
+	# many will be marked as "Vendor Advisory" instead of "Patch" at 2016 and earlier
+	# still needs to be validated as a good patch
+	if [[ "${request_inspection}" == "1" ]] ; then
+		if grep -q -P -i -e \
+"(CVE-[0-9]{4}-[0-9]+|fix|validate|sanity check|do not leak|don't leak| cap \
+|make sure|use kzalloc|prevent| limit |correct)" "${src}" ; then
+			# essentially synonyms for fix, limit
+
+			# re-review:
+			# CVE-2015-6252
+
+			# request_inspection comes from a CVE not explicitly
+			# marked Patch for any of it's links but contain an
+			# official commit from github.com/torvald or kernel.org
+			#
+			# the flag will inspect the contents of the
+			# commit to determine if it qualifies as a possible fix
+			#
+
+			# certain keywords that could be fixes
+			# the CVEs listed refer a commit containing them
+
+			# validate: CVE-2016-5829, CVE-2016-5871, CVE-2015-8569
+			# add validation: CVE-2015-8543
+			# fix: CVE-2016-5728, CVE-2016-4580, CVE-2016-4578, CVE-2016-4569
+			# fixes: CVE-2016-4568, CVE-2016-3951
+			# avoid: CVE-2016-4581
+			# sanity check: CVE-2016-3689, CVE-2016-3140, CVE-2016-3138
+			# do not leak: CVE-2016-0823
+			# cap the length: CVE-2015-8830
+			# cap: CVE-2015-6526
+			# initialize: CVE-2015-7613
+			# make sure: CVE-2015-5707
+			# use kzalloc: CVE-2015-5697
+			# closes a bug: CVE-2015-4176
+			# check length: CVE-2015-4167
+			# to prevent heap overflow: CVE-2015-4001
+			# prevents: CVE-2015-3339
+			# limit: CVE-2015-2150
+			# use correct size: CVE-2015-2042
+			# avoid memory overflow: CVE-2009-0065
+			# enforce a minimum: CVE-2008-5700
+			# remove the buggy: CVE-2008-4307
+			# avoid a double fetch: CVE-2017-8831
+
+			is_patch_processable=1
+		else
+			# to avoid reintroducing the flaw
+			:;
+		fi
+	fi
 
 	if is_patch_good "${src}" ; then
-		is_processable=1
+		is_patch_processable=1
 	fi
 
 	if is_html2text_permitted "${src}" ; then
-		is_processable=1
+		is_patch_processable=1
 	fi
 
-	if [[ "${is_processable}" != "1" ]] ; then
-		rm "${src}"
+	[[ -z "${src}" ]] && is_patch_processable=0
+
+	if [[ "${is_patch_processable}" != "1" ]] ; then
+		save_test_meta
+		[[ -f "${src}" ]] && rm "${src}"
 		return 1
 	fi
 
 	len=$(wc -c "${src}" | cut -f1 -d " ")
 	if (( ${len} == 0 )) ; then
+		is_patch_processable=0
+		save_test_meta
 		rm "${src}"
 		return 1
 	else
@@ -362,25 +614,19 @@ _process_patch() {
 		fi
 
 		# reorder by timestamp for possibly combinediff
-		local timestamp=0
-		if is_patch_good "${src}" && grep -e "^Date:" "${src}" \
+		if is_patch_good "${src}" && grep -P -e "^Date:" "${src}" \
 			> /dev/null ; then
-			htimestamp=$(grep -r -e "^Date:" "${src}" | head -n 1 \
-				| sed -e "s|[^a-zA-Z0-9:, +-]||g" \
-				| sed -e "s|Date:[\t ]*||g" \
+			htimestamp=$(grep -P -e "^Date:" "${src}" | head -n 1 \
+				| sed -r -e "s|[^a-zA-Z0-9:, +-]||g" \
+				| sed -r -e "s|Date:[\t ]*||g" \
 				| sed -r -e "s|\([A-Z]+\)||g" -e "s|[ A-Z]+$||")
-			if echo "${url}" | cut -f4 -d " " | grep -q -e ":" ; then
+			if echo "${url}" | cut -f4 -d " " | grep -F -q -e ":" ; then
 				htimestamp=$(echo "${htimestamp}" \
 					| sed -r -e \
 "s|([A-Za-z]+)[,]? ([A-Za-z]+) ([0-9]+) ([0-9]{2}:[0-9]{2}:[0-9]{2}) ([0-9]{4})\
  ([+0-9-]+)|\1, \2 \3 \5 \4 \6|")
 			fi
 			timestamp=$(date -d "${htimestamp}" +%s)
-		else
-			cve_year=$(echo "${cve_id}" | cut -f2 -d "-")
-			# put the unknown dates at the end of the queue; also
-			# reduce code to consider leap year
-			timestamp=$(($(date -d "1/1/$((${cve_year}+1))" +%s)-1))
 		fi
 
 		module=$(cat "${src}" \
@@ -388,12 +634,13 @@ _process_patch() {
 			| cut -f2 -d " " \
 			| sed -r -e "s|^[ab]/||g" \
 			| sed -r -e "s#(.c|.h)\$##g" \
-			| sed -e "s|[^a-zA-Z0-9_]|-|g")
+			| sed -r -e "s|[^a-zA-Z0-9_]|-|g")
 		subject=$(get_sanitized_commit_subject \
+			"${src}")
+		subject_raw=$(get_sampled_commit_subject \
 			"${src}")
 		# 255 filename limit so strink as much as possible
 		#local dest_fn="${cve_id}--${PRODUCT}--${module}--${subject}.patch" # preferred
-		local severity=$(get_severity)
 
 		# the naming scheme was selected for admins/endusers to pick
 		# based on hardware of the device.
@@ -404,12 +651,10 @@ _process_patch() {
 		#            reordering patches.
 		# tags: additional metadata to filter for the device/arch.
 		tags=""
-		if [[ -n "${tag1}" ]] ; then
-			tags+="-${tag1}"
-		fi
-		if [[ -n "${tag2}" ]] ; then
-			tags+="-${tag2}"
-		fi
+		[[ -n "${tag1}" ]] && tags+="-${tag1}"
+		[[ -n "${tag2}" ]] && tags+="-${tag2}"
+		[[ -n "${tag3}" ]] && tags+="-${tag3}"
+		[[ -n "${index}" ]] && tags+="-${index}"
 		tags="${tags,,}"
 		tags=$(echo "${tags}" | sed -e "s|\.|_|g")
 		local dest_fn_base=\
@@ -419,90 +664,266 @@ _process_patch() {
 		mv "${src}" "${dest}"
 
 		if cat "${dest}" \
-			| grep -F 'Diff 1 not found or parse error; hopeless!'
+			| grep -F -e 'Diff 1 not found or parse error; hopeless!'
 		then
+			is_patch_processable=0
+			save_test_meta
 			rm "${dest}"
 			return 1
 		fi
 
 		if ! is_patch_good "${dest}" ; then
+			is_patch_processable=0
+			save_test_meta
 			rm "${dest}"
 			return 1
 		fi
-		echo -e "\e[42m\e[30m Accepted \e[0m ${cve_id} ${dest_fn} ${G_LAST_URL}"
-
-		# for drytest, report, and filtering drivers/subsystems for
-		# custom hardware setups
-		local meta_path="${G_PATCHES_DIR}/${dest_fn_base}.meta"
-		echo "meta_version: ${G_PATCH_META_VERSION}" > "${meta_path}"
-		echo "severity: ${severity}" >> "${meta_path}"
-		echo "timestamp: ${timestamp}" >> "${meta_path}"
-		echo "subject: ${subject}" >> "${meta_path}"
-		echo "original_url: ${url}" >> "${meta_path}"
-		echo "last_url: ${G_LAST_URL}" >> "${meta_path}"
-		[[ -n "${tag1}" ]] \
-			&& echo "tag1: ${tag1}" >> "${meta_path}"
-		[[ -n "${tag2}" ]] \
-			&& echo "tag2: ${tag2}" >> "${meta_path}"
-		# can be used to filter for device drivers
-		local files=$(cat "${dest}" | grep -P -e "^[+-]{3} " \
-			| cut -c 5- | sed -e "s|^[a,b]/||g" | uniq \
-			| cut -f1 -d $' ' | cut -f1 -d $'\t' | tr "\n" " ")
-		echo "files: ${files}" >> "${meta_path}"
+		save_test_meta
 	fi
 	return 0
 }
 
 fetch_patches() {
-	for y in $(seq ${G_MIN_YEAR} ${G_MAX_YEAR}) recent modified ; do
-		local json_file="${G_JSONS_DIR}/nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json"
-		local cve_length=$(jq '[.[]] | length' "${json_file}")
+	queue_urls
+	download_urls
+}
 
-		for i in $(seq 0 $((${cve_length}-1))) ; do
-			local cve_id
-			local cve_id=$(jq "[.[]] | .[${i}].cveid" \
-				"${json_file}" | sed -r -e "s|\"||g")
+queue_urls() {
+	cat /dev/null > "${G_CACHE_FOLDER}/download_list"
+	touch "${G_CACHE_FOLDER}/already_downloaded"
 
-			local url=$(jq ".[${i}].refdata.url" "${json_file}" \
-				| sed -r -e "s|\"||g")
-			local url_raw=$(get_patch_direct_link "${url}" "${cve_id}")
-			local src="${G_PATCHES_DIR}/${cve_id}.patch"
-			if ! download_patch "${url_raw}" "${cve_id}" "${src}" ; then
-				if [[ "${G_LAST_URL}" =~ ^info ]] ; then
-					url=$(echo "${G_LAST_URL}" | sed -r -e "s|^info:  ||")
-					echo -e "\e[46m\e[30m   Info   \e[0m ${cve_id} ${url}"
-				else
-					G_LAST_URL=$(echo "${G_LAST_URL}" \
-						| sed -r -e "s#^(flaw|defunct|banned):  ##")
-					echo -e "\e[41m\e[30m Rejected \e[0m ${cve_id} ${url} -> ${G_LAST_URL}"
-				fi
+	for json_file in $(ls "${G_SPLIT_JSONS_DIR}"/*.json) ; do
+		local is_patchable=0
+		local exclude_binary=0
+
+		local cve_id=$(basename "${json_file}" | sed -e "s|.json||g")
+		local cve_year=$(echo "${cve_id}" | cut -f2 -d '-')
+
+		(( ${G_MIN_YEAR} <= ${cve_year} \
+			&& ${cve_year} <= ${G_MAX_YEAR} )) \
+			|| continue
+
+		local desc=$(jq \
+			'.[0].cve.description.description_data[0].value' \
+			"${json_file}" \
+			| sed -e "s|\"||g")
+		local is_disputed=0
+		local request_inspection=0
+
+		local timestamp=0
+		# put the unknown dates at the end of the queue; also
+		# reduce code to consider leap year
+		timestamp=$(($(date -d "1/1/$((${cve_year}+1))" +%s)-1))
+		local severity=$(get_severity)
+
+		local dest_fn_base="${timestamp}-${cve_id}-${severity,,}"
+		[[ "${desc}" =~ DISPUTED ]] && is_disputed=1
+
+		local reference_data_length=$(jq \
+		'.[0].cve.references.reference_data | length' "${json_file}")
+
+		is_patchable=0
+		for i in $(seq 0 $((${reference_data_length}-1))) ; do
+			local tags=$(jq \
+				'.[].cve.references.reference_data[].tags[]' \
+				"${json_file}")
+			if [[ "${tags}" =~ (Patch|Vendor Advisory) ]] ; then
+				is_patchable=1
+			fi
+		done
+
+		for i in $(seq 0 $((${reference_data_length}-1))) ; do
+			local is_direct_url="0"
+			local is_substituted_url="0"
+			if [[ "${is_patchable}" == "1" ]] ; then
+				local original_url=$(jq \
+				".[].cve.references.reference_data[${i}].url" \
+						"${json_file}" \
+						| sed -e "s|\"||g")
+				get_patch_direct_link "${original_url}" "${cve_id}"
+				download_url="${url}"
+				[[ "${original_url}" == "${download_url}" ]] \
+					&& is_direct_url="1"
+				local l1=$(echo "${original_url}" | sed -r -e "s|^http[s]?://||")
+				local l2=$(echo "${download_url}" | sed -r -e "s|^http[s]?://||")
+				[[ "${l1}" == "${l2}" ]] \
+					&& is_direct_url="1"
+				queue_patch "${download_url}" "${cve_id}"
+			elif [[ "${G_ALLOW_UNTAGGED_COMMITS}" == "1" && \
+				( "${url}" =~ ("github.com/torvalds"|"kernel.org") ) ]]
+			then
+				request_inspection=1
+				local original_url=$(jq \
+				".[].cve.references.reference_data[${i}].url" \
+					"${json_file}" \
+					| sed -e "s|\"||g")
+				get_patch_direct_link "${original_url}" "${cve_id}"
+				download_url="${url}"
+				[[ "${original_url}" == "${download_url}" ]] \
+					&& is_direct_url="1"
+				local l1=$(echo "${original_url}" | sed -r -e "s|^http[s]?://||")
+				local l2=$(echo "${download_url}" | sed -r -e "s|^http[s]?://||")
+				[[ "${l1}" == "${l2}" ]] \
+					&& is_direct_url="1"
+				queue_patch "${download_url}" "${cve_id}"
+			else
+				echo -e "\e[101m\e[30m Unpatchable \e[0m ${cve_id}"
+				is_patch_processable=0
+				save_test_meta
 			fi
 		done
 	done
+	einfo "Queuing urls done"
+}
+
+download_urls() {
+	cat "${G_CACHE_FOLDER}/download_list" | sort \
+		| uniq > "${G_CACHE_FOLDER}/download_list.t"
+	mv "${G_CACHE_FOLDER}/download_list"{.t,}
+
+	einfo "Downloading patches"
+
+	local P=()
+	while IFS= read -r line ; do
+		local cve_id=$(echo "${line}" | cut -f 1 -d $' ')
+		local cve_year=$(echo "${cve_id}" | cut -f2 -d '-')
+
+		(( ${G_MIN_YEAR} <= ${cve_year} \
+			&& ${cve_year} <= ${G_MAX_YEAR} )) \
+			|| continue
+
+		local url=$(echo "${line}" | cut -f 2- -d $' ')
+
+		grep -q -F -e "${line}" "${G_CACHE_FOLDER}/already_downloaded" \
+			echo -n "c" && continue
+
+		[[ "${url}" =~ (^info|^defunct|^banned|^flaw) ]] && continue
+		local dl_meta="${G_TEMP_DIR}"/$(echo "${cve_id}:${url}" \
+			| sha1sum | cut -f1 -d " ")
+		local src=$(grep -P -e "^src:" "${dl_meta}" | cut -f2 -d $' ')
+
+		# can silence but need to create a shell
+		if [[ "${G_DOWNLOAD_TOOL}" == "curl" ]] ; then
+			echo -e "${url}" \
+				| xargs -I '{}' -P ${G_MAX_PATCH_CONNECTIONS} \
+				curl -s -L -C - -o "${src}" "${url}"
+		else
+			echo -e "${url}" \
+				| xargs -I '{}' -P ${G_MAX_PATCH_CONNECTIONS} \
+				wget -q -c -O "${src}" "${url}"
+		fi
+		P+=($!)
+		echo -n "."
+	done < "${G_CACHE_FOLDER}/download_list"
+
+	echo ""
+	einfo "Waiting for all download threads to complete"
+
+	for p in ${P[@]} ; do
+		wait $p
+	done
+
+	P=()
+
+	einfo "Evaluating patches for validity, cleaning, etc"
+
+	while IFS= read -r line ; do
+		local cve_id=$(echo "${line}" | cut -f 1 -d $' ')
+		local cve_year=$(echo "${cve_id}" | cut -f2 -d '-')
+
+		(( ${G_MIN_YEAR} <= ${cve_year} \
+			&& ${cve_year} <= ${G_MAX_YEAR} )) \
+			|| continue
+
+		local url=$(echo "${line}" | cut -f 2- -d $' ')
+
+		grep -q -F -e "${line}" "${G_CACHE_FOLDER}/already_downloaded" \
+			echo -n "c" && continue
+
+		( _process_patch "${url}" "${cve_id}" ) &
+		P+=($!)
+		echo -n "."
+	done < "${G_CACHE_FOLDER}/download_list"
+
+	echo ""
+
+	einfo "Waiting for all evaluations to complete"
+
+	for p in ${P[@]} ; do
+		wait $p
+	done
+
+	einfo "Evaluations done"
+
+	while IFS= read -r line ; do
+		local cve_id=$(echo "${line}" | cut -f 1 -d $' ')
+		local cve_year=$(echo "${cve_id}" | cut -f2 -d '-')
+
+		(( ${G_MIN_YEAR} <= ${cve_year} \
+			&& ${cve_year} <= ${G_MAX_YEAR} )) \
+			|| continue
+
+		if ! grep -q -F -e "${line}" "${G_CACHE_FOLDER}/already_downloaded" ; then
+			echo "${line}" >> "${G_CACHE_FOLDER}/already_downloaded"
+		fi
+
+		local url=$(echo "${line}" | cut -f 2- -d $' ')
+
+		local meta_path=""
+
+		meta_path=$(grep -l -r -e "${url}" \
+			"${G_PATCHES_DIR}"/*${cve_id}*.meta 2>/dev/null)
+
+		if [[ ! -f "${meta_path}" ]] ; then
+			if [[ "${url}" =~ ^info ]] ; then
+				url=$(echo "${url}" | sed -r -e "s|^info:[ ]*||")
+				echo -e "\e[46m\e[30m     Info    \e[0m ${cve_id} ${url}"
+			else
+				url=$(echo "${url}" \
+					| sed -r -e "s#^(flaw|defunct|banned):[ ]*##")
+				echo -e "\e[41m\e[30m   Rejected  \e[0m ${cve_id} ${url}"
+			fi
+			continue
+		fi
+
+		[[ -z "${meta_path}" ]] && continue
+		local is_patch_processable=$(grep -F \
+			-e "is_patch_processable" "${meta_path}" \
+			| cut -f 2 -d $' ')
+		if [[ "${is_patch_processable}" == "1" ]] ; then
+			local dest_fn=$(grep -F \
+				-e "dest_fn_base" "${meta_path}" \
+				| cut -f 2 -d $' ').patch
+			echo -e "\e[42m\e[30m   Accepted  \e[0m ${cve_id} ${dest_fn} ${url}"
+		else
+			echo -e "\e[41m\e[30m   Rejected  \e[0m ${cve_id} ${url}"
+		fi
+	done < "${G_CACHE_FOLDER}/download_list"
 }
 
 get_sanitized_commit_subject() {
 	local fn="${1}"
-	echo $(cat "${fn}" | grep -F "Subject" | head -n 1 \
-		| sed -r -e "s|Subject: ||g" | sed -r -e "s|:|_|" -e "s| |_|g" \
+	echo $(cat "${fn}" | grep -P -e "^Subject" | head -n 1 \
+		| sed -e "s|Subject: ||g" | sed -r -e "s|:|_|" -e "s| |_|g" \
 		-e "s|\(\)|fn|g" -e "s|[^A-Za-z0-9._-]||g" -e "s|\.|_|g")
 }
 
-# wipe, download
-_wd() {
-	local url="${1}"
-	local src="${2}"
-	cat /dev/null > "${src}"
-	download "${src}" "${url}"
+get_sampled_commit_subject() {
+	local fn="${1}"
+	echo $(cat "${fn}" | grep -P -e "^Subject" | head -n 1 \
+		| sed -e "s|Subject: ||g")
 }
 
 _reset_tags() {
 	unset tag1
 	unset tag2
+        unset tag3
+        unset htags
+	unset index
 }
 
 ban_commit() {
-	local url="${1}"
+	url="${1}"
 
 	# openwall says introduced flaw, but nvd marks it as patch
 	if [[ "${url}" =~ "129a72a0d3c8e139a04512325384fe5ac119e74" ]] ; then
@@ -524,34 +945,38 @@ ban_commit() {
 		# comment is not removed immediately.
 		url="info:  ${url}"
 	fi
-	echo "${url}"
 }
 
 # provides links directly to raw patch
 get_patch_direct_link() {
-	local url="${1}"
+	url="${1}"
 	local cve_id="${2}"
 
 	if [[ "${url}" =~ ^"http://" ]] ; then
+		# prevent man in the middle (MITM) attack
 		url=$(echo "${url}" | sed -r -e "s|^http://|https://|g")
+		# todo: do the same with ftp
 	fi
 
-	url=$(ban_commit "${url}")
+	ban_commit "${url}"
 
 	if [[ "${url}" =~ "http://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git" ]] ; then
 		local h=$(echo "${url}" | grep -o -P -e "([a-z0-9]+)\$")
 		url="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/?id=${h}"
+		is_direct_url="1"
 	elif [[ "${url}" =~ "git.kernel.org/linus/" ]] ; then
 		local h=$(echo "${url}" | grep -o -P -e "([a-z0-9]+)\$")
 		url="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/?id=${h}"
+		is_direct_url="1"
 	elif [[ "${url}" =~ www\.kernel\.org \
 		&& "${url}" =~ "hb=" ]]
 	then
 		local h=$(echo "${url}" | sed -r -e "s|.*hb=([0-9a-z]{40}).*|\1|g")
 		local p=$(echo "${url}" | cut -f2 -d "?" \
-			| cut -f1 -d ";" | sed -r -e "s|p=||" \
-			| sed -e "s|linux-[0-9.]*.git|linux.git|g")
+			| cut -f1 -d ";" | sed -e "s|p=||" \
+			| sed -r -e "s|linux-[0-9.]*.git|linux.git|g")
 		url="https://git.kernel.org/pub/scm/${p}/patch/?id=${h}"
+		is_direct_url="1"
 	elif [[ ( "${url}" =~ git\.kernel\.org || \
 		  "${url}" =~ www\.kernel\.org ) \
 		&& ( "${url}" =~ ";a=commitdiff;" \
@@ -559,13 +984,15 @@ get_patch_direct_link() {
 		&& ! ( "${url}" =~ "hb=" ) ]]
 	then
 		local p=$(echo "${url}" | cut -f2 -d "?" \
-			| cut -f1 -d ";" | sed -r -e "s|p=||" \
-			| sed -e "s|linux-[0-9.y]*.git|linux.git|g")
+			| cut -f1 -d ";" | sed -e "s|p=||" \
+			| sed -r -e "s|linux-[0-9.y]*.git|linux.git|g")
 		local h=$(echo "${url}" | grep -o -P -e ";h=([a-z0-9]+)" \
-			| sed -r -e "s|;h=||")
+			| sed -e "s|;h=||")
 		url="https://git.kernel.org/pub/scm/${p}/patch/?id=${h}"
+		is_direct_url="1"
 	elif [[ "${url}" =~ "/commit/".*(\&|\?)"id="[0-9a-z]+ ]] ; then
 		url=$(echo "${url}" | sed -e "s|/commit/|/patch/|")
+		is_direct_url="1"
 	elif [[ "${url}" =~ lore\.kernel\.org ]] ; then
 		url=$(echo "${url}" | sed -r -e "s|/T/(#u)?|/|g")
 		if [[ "${url}" =~ /$ ]] ; then
@@ -573,6 +1000,7 @@ get_patch_direct_link() {
 		else
 			url="${url}/raw"
 		fi
+		is_direct_url="1"
 	elif [[ "${url}" =~ patchwork\.kernel\.org ]] ; then
 		if [[ "${G_DOWNLOAD_TOOL}" == "curl" ]] ; then
 			url=$(curl -L -s -o /dev/null -w %{url_effective} \
@@ -580,35 +1008,44 @@ get_patch_direct_link() {
 			url="${url}mbox"
 		else
 			url=$(wget -O /dev/null "${url}" 2>&1 \
-				| grep "http.*\[following\]" \
+				| grep -P -e "http.*\[following\]" \
 				| sed -e "s|Location: ||" \
 				-e "s|\[following\]||g")
 			url="${url}mbox"
 		fi
+		is_direct_url="1"
 	elif [[ "${url}" =~ patchwork ]] ; then
 		url="${url}mbox"
+		is_direct_url="1"
 	elif [[ "${url}" =~ lkml\.org ]] ; then
 		url=$(echo "${url}" | sed -e "s|/lkml/|/lkml/diff/|g" \
 			| echo "$(cat -)/1")
+		is_direct_url="1"
 	elif [[ "${url}" =~ github\.com && ! ( "${url}" =~ \.patch$ ) \
 		&& ! ( "${url}" =~ \.md$ ) \
 		&& ! ( "${url}" =~ "/issues/" ) ]] ; then
 		url="${url}.patch"
+		is_direct_url="1"
 	elif [[ "${url}" =~ salsa\.debian\.org \
 		&& "${url}" =~ "/commit/" ]]
 	then
 		url="${url}.patch"
+		is_direct_url="1"
 	elif [[ "${url}" =~ marc.info ]] ; then
 		url="${url}&q=mbox"
+		is_direct_url="1"
 	elif [[ "${url}" =~ "securityfocus.com/bid" ]] ; then
 		url="${url}/solution"
+		is_direct_url="1"
 	fi
-	url=$(fix_direct_download "${url}" "${cve_id}")
-	echo "${url}"
+	fix_direct_download "${url}" "${cve_id}"
 }
 
 is_patch_good() {
 	local f="${1}"
+
+	[[ -f "${f}" ]] || return 1
+
 	if pcregrep -s -M "^--- .*\n^\+\+\+ .*\n" "${f}" 2>/dev/null 1>/dev/null ; then
 		return 0
 	else
@@ -619,7 +1056,8 @@ is_patch_good() {
 is_html2text_permitted() {
 	local f="${1}"
 	local is_html=0
-	cat "${f}" | grep -q -F -e '</html>' && is_html=1
+	[[ -f "${f}" ]] || return 1
+	cat "${f}" | grep -q -F -e '</html>' 2>/dev/null 1>/dev/null && is_html=1
 	if [[ "${is_html}" == "1" ]] && is_patch_good "${f}" ; then
 		return 0
 	else
@@ -627,34 +1065,96 @@ is_html2text_permitted() {
 	fi
 }
 
+# We need data independence for multithreading.
+# Store all data associated with a url as a (pickled) object.
+# Store all state information related to this data.
+# When we have data independence, we can process out of order
+# if blocking I/O for both downloading and _process_patch.
+# context is enqueue_download
+save_download_meta() {
+	# ${cve_id}:${url} is used to ensure that ${src} doesn't
+	# get removed if it used multiple times per different cve
+	# When _process_patch gets called,
+	# _process_patch will move $src to $dest or remove it
+	# if it is invalid.
+	dl_meta="${G_TEMP_DIR}"/$(echo "${cve_id}:${url}" | sha1sum | cut -f1 -d " ")
+
+	if [[ -f "${dl_meta}" ]] ; then
+		# don't clobber
+		return
+	fi
+
+	echo "cve_id: ${cve_id}" > "${dl_meta}"
+	echo "download_url: ${url}" >> "${dl_meta}"
+	[[ -n "${htags}" ]] \
+		&& echo "htags: ${htags}" >> "${dl_meta}"
+	[[ -n "${index}" ]] \
+		&& echo "index: ${index}" >> "${dl_meta}"
+	echo "is_direct_url: ${is_direct_url}" >> "${dl_meta}"
+	echo "is_disputed: ${is_disputed}" >> "${dl_meta}"
+	echo "is_substituted_url: ${is_substituted_url}" >> "${dl_meta}"
+	echo "original_url: ${original_url}" >> "${dl_meta}"
+	echo "request_inspection: ${request_inspection}" >> "${dl_meta}"
+	echo "severity: ${severity}" >> "${dl_meta}"
+	[[ -n "${tag1}" ]] \
+		&& echo "tag1: ${tag1}" >> "${dl_meta}"
+	[[ -n "${tag2}" ]] \
+		&& echo "tag2: ${tag2}" >> "${dl_meta}"
+	[[ -n "${tag3}" ]] \
+		&& echo "tag3: ${tag3}" >> "${dl_meta}"
+	echo "src: ${src}" >> "${dl_meta}"
+	echo "timestamp: ${timestamp}" >> "${dl_meta}"
+	src="${dl_meta}.data"
+	cat /dev/null > "${src}"
+}
+
+# context is _process_patch
+restore_download_meta() {
+	dl_meta="${G_TEMP_DIR}"/$(echo "${cve_id}:${url}" | sha1sum | cut -f1 -d " ")
+	cve_id=$(grep -F -e "cve_id" "${dl_meta}" | cut -f2 -d $' ')
+	grep -q -F -e "htags" "${dl_meta}" && \
+		htags=$(grep -F -e "htags" "${dl_meta}" | cut -f2 -d $' ')
+	grep -q -F -e "index" "${dl_meta}" && \
+		index=$(grep -F -e "index" "${dl_meta}" | cut -f2 -d $' ')
+	is_direct_url=$(grep -F -e "is_direct_url" "${dl_meta}" | cut -f2 -d $' ')
+	is_disputed=$(grep -F -e "is_disputed" "${dl_meta}" | cut -f2 -d $' ')
+	is_substituted_url=$(grep -F -e "is_substituted_url" "${dl_meta}" | cut -f2 -d $' ')
+	original_url=$(grep -F -e "original_url" "${dl_meta}" | cut -f2 -d $' ')
+	request_inspection=$(grep -F -e "request_inspection" "${dl_meta}" | cut -f2 -d $' ')
+	severity=$(grep -F -e "severity" "${dl_meta}" | cut -f2 -d $' ')
+	src=$(grep -P -e "^src" "${dl_meta}" | cut -f2 -d $' ')
+	grep -q -F -e "tag1" "${dl_meta}" && \
+		tag1=$(grep -F -e "tag1" "${dl_meta}" | cut -f2 -d $' ')
+	grep -q -F -e "tag2" "${dl_meta}" && \
+		tag2=$(grep -F -e "tag2" "${dl_meta}" | cut -f2 -d $' ')
+	grep -q -F -e "tag3" "${dl_meta}" && \
+		tag3=$(grep -F -e "tag3" "${dl_meta}" | cut -f2 -d $' ')
+	timestamp=$(grep -F -e "timestamp" "${dl_meta}" | cut -f2 -d $' ')
+	url=$(grep -F -e "download_url" "${dl_meta}" | cut -f2 -d $' ')
+	rm "${dl_meta}"
+}
+
 # skips non patchfiles
-download_patch() {
+queue_patch() {
 	local url="${1}"
 	local cve_id="${2}"
-	local src="${3}"
 
-	if [[ "${url}" =~ \.zip$|\.xz$|\.gz$|\.bz2$ ]] ; then
+	if [[ "${exclude_binary}" == "0" && "${url}" =~ \.zip$|\.xz$|\.gz$|\.bz2$ ]] ; then
 		# don't download patchsets or kernel incremental patches
 		return 1
 	elif [[ "${url}" =~ "source.android.com/security/bulletin" ]] ; then
 		return 1
 	fi
-#		|| "${url}" =~ "www.codeaurora.org"
 
 	_reset_tags
 
 	# multipatch
-	if process_multipatch "${url}" "${cve_id}" "${src}" ; then
+	if queue_multipatch "${url}" "${cve_id}" ; then
 		return 0
 	fi
 
-	cat /dev/null > "${src}"
-	download "${src}" "${url}"
-	if _process_patch ; then
-		return 0
-	fi
-
-	return 1
+	enqueue_download "${url}" "${cve_id}"
+	return 0
 }
 
 # this only reports based on configuration data
@@ -666,68 +1166,79 @@ report_cves_json_only() {
 # this only reports if the patch was applied and doesn't consider CVEs without patches at the moment
 report_cves_patches_only() {
 	pushd "${G_KERNEL_SOURCE_FOLDER}" > /dev/null
-	# 2002
-	for y in $(seq ${G_MIN_YEAR} ${G_MAX_YEAR}) recent modified ; do
-		local json_file="${G_JSONS_DIR}/nvdcve-${NVD_JSON_SCHEMA_VERSION}-${y}.json"
-		einfo "Processing ${json_file}"
-		local cve_length=$(jq '[.[]] | length' "${json_file}")
 
-		local previous_cve=""
-		for i in $(seq 0 $((${cve_length}-1))) ; do
-			local cve_id=$(jq "[.[]] | .[${i}].cveid" "${json_file}" \
-				| sed -r -e "s|\"||g")
-			[[ "${previous_cve}" == "${cve_id}" ]] && continue
-			previous_cve=${cve_id}
+	for json_file in $(ls "${G_SPLIT_JSONS_DIR}"/*.json) ; do
+		#einfo "Processing ${json_file}"
 
-			local severity=$(get_severity)
-			local desc=$(jq "[.[]] | .[${i}].desc" "${json_file}" \
-				| sed -r -e "s|\"||g")
+		local cve_id=$(basename "${json_file}" | sed -e "s|.json||g")
+		local cve_year=$(echo "${cve_id}" | cut -f2 -d "-")
 
-			local is_vulnerable="0"
-			local t_files=$(tempfile)
-			ls "${G_PATCHES_DIR}"/*${cve_id}*.patch > "${t_files}" 2>/dev/null
+		(( ${G_MIN_YEAR} <= ${cve_year} \
+			&& ${cve_year} <= ${G_MAX_YEAR} )) \
+			|| continue
+
+		local desc=$(jq '.[].cve.description.description_data[0].value' "${json_file}" \
+				| sed -e "s|\"||g")
+		local severity=$(get_severity)
+
+		local vulnerability_class="0" # 0=none, 1=possibly, 2=0-day, no known patch exists
+		local t_files=$(tempfile)
+		ls "${G_PATCHES_DIR}"/*${cve_id}*.patch > "${t_files}" 2>/dev/null
+		if [[ "$?" == "0" ]] ; then
 			while IFS= read -r p ; do
 				patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
 					-i "${p}" 2> /dev/null 1> /dev/null
-				is_applied="$?"
-				is_vulnerable=$((${is_vulnerable} | ${is_applied}))
-			done < "${t_files}"
-			rm "${t_files}"
-
-			local len_P=$(echo "${P[@]}" | wc -c)
-			if [[ "${is_vulnerable}" == "0" ]] && (( ${len_P} > 1 )) ; then
-				einfo "${cve_id}"
-				einfow "Description:  ${desc}"
-				einfo "NIST NVD:  https://nvd.nist.gov/vuln/detail/${cve_id}"
-				einfo "MITRE:  https://cve.mitre.org/cgi-bin/cvename.cgi?name=${cve_id}"
-				#local url=$(jq ".[${i}].refdata.url" "${json_file}" | sed -r -e "s|\"||g")
-				#einfo "Patch (message):  ${url}"
-				#local url_raw=$(get_patch_direct_link "${url}" "${cve_id}" \
-				#	| sed -r -e "s#^(flaw|defunct|banned|info):  ##")
-				#einfo "Patch (raw):  ${url_raw}"
-				if [[ "${severity}" == "CRITICAL" ]] ; then
-					einfo "Severity:  \e[100mCRITICAL\e[0m"
-				elif [[ "${severity}" == "HIGH" ]] ; then
-					einfo "Severity:  \e[41mHIGH\e[0m"
-				elif [[ "${severity}" == "MEDIUM" ]] ; then
-					einfo "Severity:  \e[43m\e[30mMedium\e[0m"
-				elif [[ "${severity}" == "LOW" ]] ; then
-					einfo "Severity:  \e[44m\e[30mLow\e[0m"
-				else
-					einfo "Severity:  N/A"
+				if [[ "$?" == "0" ]] ; then
+					vulnerability_class="1"
 				fi
-				einfo "Vulnerable: possibly yes"
-				einfo ""
+			done < "${t_files}"
+		else
+			vulnerability_class="2"
+		fi
+		[[ -f "${t_files}" ]] && rm "${t_files}"
+
+		if (( "${vulnerability_class}" > 0 )) ; then
+			einfo "${cve_id}"
+			einfow "Description:  ${desc}"
+			einfo "NIST NVD:  https://nvd.nist.gov/vuln/detail/${cve_id}"
+			einfo "MITRE:  https://cve.mitre.org/cgi-bin/cvename.cgi?name=${cve_id}"
+			if [[ "${severity}" == "CRITICAL" ]] ; then
+				einfo "Severity:  \e[100mCRITICAL\e[0m"
+			elif [[ "${severity}" == "HIGH" ]] ; then
+				einfo "Severity:  \e[41mHIGH\e[0m"
+			elif [[ "${severity}" == "MEDIUM" ]] ; then
+				einfo "Severity:  \e[43m\e[30mMedium\e[0m"
+			elif [[ "${severity}" == "LOW" ]] ; then
+				einfo "Severity:  \e[44m\e[30mLow\e[0m"
+			else
+				einfo "Severity:  N/A"
 			fi
-		done
+			if [[ "${vulnerability_class}" == "2" ]] ; then
+				einfo "Vulnerable: yes, no known patch exists"
+			elif [[ "${vulnerability_class}" == "1" ]] ; then
+				einfo "Vulnerable: possibly yes, false positive possible"
+			else
+				einfo "Unknown vulnerability class"
+			fi
+			einfo ""
+		else
+			einfo "${cve_id} skipped"
+		fi
 	done
+	einfo "Skipped:  This means that it could be a bad patch, bad backport, bad forward port."
+	einfo "Vulnerable: possibly yes, false positive possible:  This means that the patch applied without problems."
+	einfo "Vulnerable: yes, no known patch exists:  This means no patch file was provided to resolve the CVE by the security community or by the module maintainer."
 	popd > /dev/null
 }
 
 drytest_cves() {
 	einfo "Drytesting"
 	local t_files=$(tempfile)
-	ls "${G_PATCHES_DIR}"/*.patch > "${t_files}" 2>/dev/null
+	ls "${G_PATCHES_DIR}"/*.meta > "${t_files}" 2>/dev/null
+	if [[ "$?" != 0 ]] ; then
+		eerror "No patches found to dry run"
+		exit 1
+	fi
 	local c=0
 	local total=0
 	local bad_patches=0
@@ -736,10 +1247,18 @@ drytest_cves() {
 	local t_out=$(tempfile)
 	local displayed_kernel_release=0
 	cat /dev/null > "${G_LOGS}/drytest"
-	while IFS= read -r p ; do
+	while IFS= read -r m ; do
 		total=$((total+1))
-		local cve_id=$(basename "${p}" | cut -f2-4 -d "-")
-		local patch_timestamp=$(basename "${p}" | cut -f1 -d "-")
+		local p="${G_PATCHES_DIR}"/$(basename "${m}" | sed -r -e "s|\.patch$|.meta|g")
+		local cve_id=$(grep -F -e "cve_id" "${m}" | cut -f2 -d $' ')
+		local cve_year=$(echo "${cve_id}" | cut -f2 -d "-")
+
+		(( ${G_MIN_YEAR} <= ${cve_year} \
+			&& ${cve_year} <= ${G_MAX_YEAR} )) \
+			|| continue
+
+		local patch_timestamp=$(grep -F -e "timestamp" "${m}" | cut -f2 -d $' ')
+		local is_patch_processable=$(grep -F -e "is_patch_processable" "${m}" | cut -f2 -d $' ')
 		if (( ${patch_timestamp} >= ${G_KERNEL_TIMESTAMP} \
 			&& ${displayed_kernel_release} == 0 ))
 		then
@@ -753,29 +1272,35 @@ drytest_cves() {
 		local is_previously_applied=0
 		local is_fuzzy_succeeded=0
 		local is_garbage=0
-		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${p}" 2>&1) \
-			| grep -q -F -e "succeeded at" && is_fuzzy_succeeded=1
-		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${p}" 2>&1) \
-			| grep -q -F -e "FAILED at" && is_failed_at=1
-		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${p}" 2>&1) \
-			| grep -q -F -e "can't find file" && is_file_missing=1
-		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${p}" 2>&1) \
-			| grep -q -F -e "malformed" && is_malformed=1
-		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${p}" 2>&1) \
-			| grep -q -F -e "Reversed (or previously applied)" \
-			&& is_previously_applied=1
-		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${p}" 2>&1) \
-			| grep -q -F -e "Only garbage was found in the patch input." \
-			&& is_garbage=1
-		patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${p}" 2> /dev/null 1> /dev/null
-		local is_vulnerable="$?"
+		if [[ "${is_patch_processable}" == "1" ]] ; then
+			echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
+				-i "${p}" 2>&1) \
+				| grep -q -F -e "succeeded at" && is_fuzzy_succeeded=1
+			echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
+				-i "${p}" 2>&1) \
+				| grep -q -F -e "FAILED at" && is_failed_at=1
+			echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
+				-i "${p}" 2>&1) \
+				| grep -q -F -e "can't find file" && is_file_missing=1
+			echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
+				-i "${p}" 2>&1) \
+				| grep -q -F -e "malformed" && is_malformed=1
+			echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
+				-i "${p}" 2>&1) \
+				| grep -q -F -e "Reversed (or previously applied)" \
+				&& is_previously_applied=1
+			echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
+				-i "${p}" 2>&1) \
+				| grep -q -F -e "Only garbage was found in the patch input." \
+				&& is_garbage=1
+
+			# todo?
+			#read error : Is a directory
+
+			patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
+				-i "${p}" 2> /dev/null 1> /dev/null
+			local is_vulnerable="$?"
+		fi
 		if [[ "${is_previously_applied}" == "1" \
 			&& "${is_fuzzy_succeeded}" != "1" \
 			&& "${is_failed_at}" != "1" \
@@ -801,7 +1326,7 @@ drytest_cves() {
 			echo -e \
 "\e[100m\e[97m  Bad patch \e[0m ${cve_id} sha256=${h} path=${p}" \
 			>> "${G_LOGS}/drytest"
-		elif [[ "${is_vulnerable}" == "0" ]] ; then
+		elif [[ "${is_vulnerable}" == "0" || "${is_patch_processable}" == "0" ]] ; then
 			echo -e "\e[41m Vulnerable \e[0m ${cve_id}"
 			c=$((c+1))
 		elif [[ "${is_previously_applied}" == 1 ]] ; then
@@ -810,7 +1335,7 @@ drytest_cves() {
 			echo -e \
 "\e[100m\e[97m  Rejected  \e[0m ${cve_id}"
 			echo -e \
-"\e[100m\e[97m  Rejected  \e[0m ${cve_id} sha256=${h} path=${p} (dupe hunk problem avoidance)" \
+"\e[100m\e[97m  Rejected  \e[0m ${cve_id} (dupe hunk problem avoidance) sha256=${h} path=${p}" \
 			>> "${G_LOGS}/drytest"
 		else
 			eerror \
@@ -826,7 +1351,7 @@ is_fuzzy_succeeded=${is_fuzzy_succeeded} is_vulnerable=${is_vulnerable}"
 	rm "${t_out}"
 	popd > /dev/null
 	rm "${t_files}"
-	local hunks=$(grep -r -e "^@@" "${G_PATCHES_DIR}" | wc -l)
+	local hunks=$(grep -P -e "^@@" "${G_PATCHES_DIR}"/* | wc -l)
 	einfo \
 "${c} vulnerabilities detected, ${total} total patches tested, ${bad_patches} \
 bad patches, ${bad_ports} bad backports or forwardports patches, ${hunks} \
@@ -834,15 +1359,125 @@ hunks involved"
 }
 
 is_patch_authorized() {
-	local cve_id="${1}"
-	local original_url="${2}"
-	local direct_download_url="${3}"
+	local patch_path="${1}"
+	local patch_meta_path="${G_PATCHES_DIR}"/$(basename "${patch_path}" | sed -r -e "s|\.patch$|.meta|g")
+	local download_url=$(grep -F -e "download_url:" "${patch_meta_path}" | cut -f2 -d $' ')
+	local is_direct_url=$(grep -F -e "is_direct_url:" "${patch_meta_path}" | cut -f2 -d $' ')
+	local is_disputed=$(grep -F -e "is_disputed:" "${patch_meta_path}" | cut -f2 -d $' ')
+	local is_substituted_url=$(grep -F -e "is_substituted_url:" "${patch_meta_path}" | cut -f2 -d $' ')
+	local original_url=$(grep -F -e "original_url:" "${patch_meta_path}" | cut -f2 -d $' ')
 	for c in ${CVE_BLACKLIST_FIXES} ; do
 		if [[ "${c}" == "${cve_id}" ]] ; then
 			return 1
 		fi
 	done
-	return 0
+
+	# See also https://github.com/orsonteodoro/oiledmachine-overlay/blob/088556e40afa1d0de742683649ac6dc0bb8d0c3c/eclass/ot-kernel-cve.eclass
+	# for how these hashes were obtained
+
+	if (( ${CVE_FIX_TRUST_LEVEL} & 0x00000001 )) ; then
+		# kernel.org repos
+		if [[ "${download_url}" =~ "kernel.org" ]] ; then
+			return 0
+		fi
+	fi
+	if (( ${CVE_FIX_TRUST_LEVEL} & 0x00000002 )) ; then
+		# github.com/torvalds
+		if [[ "${download_url}" =~ "github.com/torvalds" ]] ; then
+			return 0
+		fi
+	fi
+	if (( ${CVE_FIX_TRUST_LEVEL} & 0x00000008 )) ; then
+		# module maintainer(s)
+		# this flag concerns patches that are WIP or under code review
+
+		# todo, requires manual inspection if the person submitting is
+		# the module maintainer on the copyright or a daily contributor
+		# on the repo.
+		# no special checks are required if commit is obtained from the
+		# official repo.
+		# if the patch is not from official repo like patchwork then
+		# special vetting is required.
+		# the problem is the attacker can pretend to be a credible
+		# source, via social engineering attack.
+		if [[ "${download_url}" =~ 3d94a4a8373bf5f45cf5f939e88b8354dbf2311b ]] ; then
+			# for CVE-2019-14895
+			return 0
+		fi
+	fi
+	if (( ${CVE_FIX_TRUST_LEVEL} & 0x00010000 )) ; then
+		# immediate NVD links
+		# considers followed resolved links as direct
+		if [[ "${is_direct_url}" == "1" ]] ; then
+			return 0
+		fi
+	fi
+	if (( ${CVE_FIX_TRUST_LEVEL} & 0x00020000 )) ; then
+		# indirect NVD links
+		# todo, requires tuxparoni-url-resolver, meta changes
+		if [[ "${download_url}" =~ b60fe990c6b07ef6d4df67bc0530c7c90a62623a ]] ; then
+			# for CVE-2019-14821
+			return 0
+		elif [[ "${is_substituted_url}" == "1" ]] ; then
+			# these are substituted manually
+			return 0
+		fi
+	fi
+	if (( ${CVE_FIX_TRUST_LEVEL} & 0x00040000 )) ; then
+		# corporate reviewed
+		# todo, requires manual inspection of verified accounts feature
+		if [[ "${download_url}" =~ 3d94a4a8373bf5f45cf5f939e88b8354dbf2311b ]] ; then
+			# for CVE-2019-14895
+			return 0
+		fi
+	fi
+	if (( ${CVE_FIX_TRUST_LEVEL} & 0x04000000 )) ; then
+		# major distro team suggested
+		# todo, requires manual inspected
+		if [[ "${download_url}" =~ a10d9a71bafd3a283da240d2868e71346d2aef6f ]] ; then
+			# for CVE-2007-3732
+			return 0
+		fi
+	fi
+	if (( ${CVE_FIX_TRUST_LEVEL} & 0x01000000 )) ; then
+		# FOSS contributor, tuxparoni patches
+		# todo, requires manual vetting of the originator of the author
+		# design standards for this flag:
+		# patch author has project from github, sourceforge, gitlab, etc.
+		# projects released under open licenses
+
+		if [[ "${is_tuxparoni_patch}" == "1" ]] ; then
+			return 0
+		fi
+
+		# todo: compare against whitelist authors
+	fi
+	if (( ${CVE_FIX_TRUST_LEVEL} & 0x10000000 )) ; then # OSS contributor
+		if [[ "${download_url}" == "https://lkml.org/lkml/diff/2019/9/9/487/1" ]] ; then
+			# for CVE-2019-16229 ... CVE_2019_16233
+			return 0
+		fi
+		# todo, requires manual vetting of the originator of the author
+		# design standards for this flag:
+		# patch author has authored non-free code that is widely used
+	fi
+	if (( ${CVE_FIX_TRUST_LEVEL} & 0x80000000 )) ; then # patron, user patches, your patches
+		[[ "${is_user_patch}" == "1" ]] \
+			&& return 0
+	fi
+
+	# unimplemented yet
+	if (( ${CVE_FIX_TRUST_LEVEL} & 0x00000004 )) ; then
+		# reserved
+		:;
+	fi
+	if (( ${CVE_FIX_TRUST_LEVEL} & 0x00080000 )) ; then
+		# major distro reviewed
+		# todo, requires manual inspection
+		# none from old file
+		:;
+	fi
+	return 1
 }
 
 # true / triage patch
@@ -850,7 +1485,7 @@ is_patch_authorized() {
 tpatch() {
 	local patch_path="${patch_path}"
 	patch ${G_PATCH_DEFAULT_OPTIONS} -i "${patch_path}" || true
-	echo -e "\e[100m\e[97m  Triaged  \e[0m ${cve_id} ${patch_patch}"
+	echo -e "\e[100m\e[97m   Triaged  \e[0m ${cve_id} ${patch_patch}"
 }
 
 # exit if broken
@@ -858,10 +1493,56 @@ epatch() {
 	local patch_path="${patch_path}"
 	patch ${G_PATCH_DEFAULT_OPTIONS} -i "${patch_path}"
 	if [[ "$?" != "0" ]] ; then
-		echo -e "\e[100m\e[97m   Failed  \e[0m ${cve_id} ${patch_patch}"
+		echo -e "\e[100m\e[97m   Failed   \e[0m ${cve_id} ${patch_patch}"
 		exit 1
 	else
 		echo -e "\e[100m\e[97m   Applied  \e[0m ${cve_id}"
+	fi
+}
+
+# version tests
+# x < y
+is_x_lt_y() {
+	local x="${1}"
+	local y="${2}"
+	local result=$(echo -e "${x}\n${y}" | sort -V | tr "\n" " " | cut -f1 -d $' ')
+	if [[ "${result}" == "${x}" ]] ; then
+		return 0
+	else
+		return 1
+	fi
+}
+
+is_x_le_y() {
+	local x="${1}"
+	local y="${2}"
+	local result=$(echo -e "${x}\n${y}" | sort -V | tr "\n" " " | cut -f1 -d $' ')
+	if [[ "${result}" == "${x}" || "${x}" == "${y}" ]] ; then
+		return 0
+	else
+		return 1
+	fi
+}
+
+is_x_gt_y() {
+	local x="${1}"
+	local y="${2}"
+	local result=$(echo -e "${x}\n${y}" | sort -V | tr "\n" " " | cut -f1 -d $' ')
+	if [[ "${result}" != "${x}" ]] ; then
+		return 0
+	else
+		return 1
+	fi
+}
+
+is_x_ge_y() {
+	local x="${1}"
+	local y="${2}"
+	local result=$(echo -e "${x}\n${y}" | sort -V | tr "\n" " " | cut -f1 -d $' ')
+	if [[ "${result}" == "${x}" || "${x}" == "${y}" ]] ; then
+		return 0
+	else
+		return 1
 	fi
 }
 
@@ -879,33 +1560,34 @@ epatch() {
 # We don't distribute custom backport patches at the moment because of licensing,
 # but it left to custom kernel maintainers.
 
-# Consumers are responsible to runnning patch, helpers tpatch and dpatch are
-# provided.
-
-# return 0 if you applied the patch
-# return 1 if it doesn't need an alterantive patch and it will proceed with
-# patching.
 conflict_resolver_default() {
 	local cve_id="${1}"
 	local patch_path="${2}" # original patch which can be used to revert or
 				# partially apply it
-	local patch_hash=$(sha256sum "${patch_path}" | cut -f1 -d " ")
+	local patch_meta_path=$(echo "${patch_path}" \
+		| sed -r -e "s|\.patch$|.meta|g")
+	local original_url=$(cat "${patch_meta_path}" \
+		| grep -F -e "original_url:" | cut -f2 -d $' ')
+	local download_url=$(cat "${patch_meta_path}" \
+		| grep -F -e "download_url:" | cut -f2 -d $' ')
+	local patch_hash=$(sha256sum "${patch_path}" \
+		| cut -f1 -d " ")
 	local alterative_patch=""
 	if [[ "${patch_hash}" == "blah" ]] ; then
 		# path to patch
-		alternative_patch="${G_CUSTOM_PATCHES_DIR}/blah.patch"
-
-		epatch "${alternative_patch}"
-		return 0
+		p="${G_CUSTOM_PATCHES_DIR}/blah.patch"
+		is_user_patch="1"
 	fi
-
-	return 1
 }
 
 apply_patches() {
-	einfo "Applying"
+	einfo "Applying CVE patches"
 	local t_files=$(tempfile)
 	ls "${G_PATCHES_DIR}"/*.patch > "${t_files}" 2>/dev/null
+	if [[ "$?" != "0" ]] ; then
+		eerror "Missing patches to apply"
+		exit 1
+	fi
 	local c=0
 	local total=0
 	local bad_patches=0
@@ -916,6 +1598,12 @@ apply_patches() {
 	while IFS= read -r p ; do
 		total=$((total+1))
 		local cve_id=$(basename "${p}" | cut -f2-4 -d "-")
+		local cve_year=$(echo "${cve_id}" | cut -f2 -d "-")
+
+		(( ${G_MIN_YEAR} <= ${cve_year} \
+			&& ${cve_year} <= ${G_MAX_YEAR} )) \
+			|| continue
+
 		local patch_timestamp=$(basename "${p}" | cut -f1 -d "-")
 		if (( ${patch_timestamp} >= ${G_KERNEL_TIMESTAMP} \
 			&& ${displayed_kernel_release} == 0 )) ; then
@@ -923,7 +1611,13 @@ apply_patches() {
 			displayed_kernel_release=1
 		fi
 		cat /dev/null > "${t_out}"
-		# -f
+
+		local is_user_patch="0"
+		local is_tuxparoni_patch="0"
+		if declare -f conflict_resolver > /dev/null ; then
+			conflict_resolver "${cve_id}" "${p}"
+		fi
+
 		local is_failed_at=0
 		local is_file_missing=0
 		local is_malformed=0
@@ -952,7 +1646,7 @@ apply_patches() {
 			&& is_garbage=1
 		patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
 			-i "${p}" 2> /dev/null 1> /dev/null
-		local is_vulnerable="$?"
+		local is_vulnerable="$?" # 0 is true
 		if [[ "${is_previously_applied}" == "1" \
 			&& "${is_fuzzy_succeeded}" != "1" \
 			&& "${is_failed_at}" != "1" \
@@ -967,27 +1661,18 @@ apply_patches() {
 			bad_patches=$((${bad_patches}+1))
 			echo -e "\e[100m\e[97m  Bad patch \e[0m ${cve_id} file=${p}"
 		elif [[ "${is_vulnerable}" == "0" ]] ; then
-			if is_patch_authorized "${cve_id}" "${}" "${}" ; then
-				echo -e "\e[41m Applied \e[0m ${cve_id}"
-				if declare -f conflict_resolver > /dev/null ; then
-					if conflict_resolver "${cve_id}" \
-						"${p}" ; then
-						:;
-					else
-						patch ${G_PATCH_DEFAULT_OPTIONS} \
-							-i "${p}"
-					fi
-				else
-					patch ${G_PATCH_DEFAULT_OPTIONS} \
-						-i "${p}"
-				fi
+			if is_patch_authorized "${p}" ; then
+				echo -e "\e[44m\e[30m   Applied  \e[0m ${cve_id}"
+				patch ${G_PATCH_DEFAULT_OPTIONS} \
+					-i "${p}" 2> /dev/null 1> /dev/null
 			else
-				echo -e "\e[100m\e[97m  Rejected  \e[0m ${cve_id} (unauthorized)"
+				echo -e "\e[100m\e[97m  Rejected  \e[0m ${cve_id} (unauthorized) ${p}"
 			fi
 			c=$((c+1))
 		elif [[ "${is_previously_applied}" == 1 ]] ; then
-			# Try to avoid duplicate hunk problem
-			echo -e "\e[100m\e[97m  Rejected  \e[0m ${cve_id} file=${p} (hp)"
+			# Try to avoid duplicate hunk problem that
+			# could cause overflows, underflows, crashes
+			echo -e "\e[100m\e[97m  Rejected  \e[0m ${cve_id} (dupe hunk problem avoidance) file=${p}"
 		else
 			eerror "uncaught case"
 			rm "${t_out}"
@@ -998,7 +1683,7 @@ apply_patches() {
 	rm "${t_out}"
 	popd > /dev/null
 	rm "${t_files}"
-	local hunks=$(grep -r -e "^@@" "${G_PATCHES_DIR}" | wc -l)
+	local hunks=$(grep -F -e "^@@" "${G_PATCHES_DIR}" | wc -l)
 	einfo \
 "${c} vulnerabilities detected, ${total} total patches tested, ${bad_patches} \
 bad patches, ${bad_ports} bad backports or forwardports patches, ${hunks} \
@@ -1008,6 +1693,10 @@ hunks involved"
 generate_kpatch_modules() {
 	local t_files=$(tempfile)
 	ls "${G_PATCHES_DIR}"/*.patch > "${t_files}" 2>/dev/null
+	if [[ "$?" != "0" ]] ; then
+		eerror "Missing patches to generate kpatch modules"
+		exit 1
+	fi
 	pushd "${G_KERNEL_SOURCE_FOLDER}" > /dev/null
 	while IFS= read -r p ; do
 		local cve_id=$(echo "${p}" | sed -r -e "s|(CVE-[0-9]+-[0-9]+).*|\1|")
@@ -1047,9 +1736,12 @@ get_tag() {
 setup_globals() {
 	G_FEEDS_DIR="${G_CACHE_FOLDER}/feeds"
 	G_JSONS_DIR="${G_CACHE_FOLDER}/jsons"
+	G_SPLIT_JSONS_DIR="${G_CACHE_FOLDER}/split_jsons"
 	G_PATCHES_DIR="${G_CACHE_FOLDER}/patches"
 	G_CUSTOM_PATCHES_DIR="${G_CACHE_FOLDER}/custom_patches"
 	G_LOGS="${G_CACHE_FOLDER}/logs"
+	G_CORES=$(cat /proc/cpuinfo | grep processor | wc -l)
+	G_CURRENT_YEAR=$(date +%Y)
 }
 
 _merged_mkdir() {
@@ -1061,10 +1753,12 @@ _merged_mkdir() {
 
 setup_cache() {
 	_merged_mkdir "${G_CACHE_FOLDER}"
+	_merged_mkdir "${G_CUSTOM_PATCHES_DIR}"
 	_merged_mkdir "${G_FEEDS_DIR}"
 	_merged_mkdir "${G_JSONS_DIR}"
-	_merged_mkdir "${G_PATCHES_DIR}"
 	_merged_mkdir "${G_LOGS}"
+	_merged_mkdir "${G_PATCHES_DIR}"
+	_merged_mkdir "${G_SPLIT_JSONS_DIR}"
 }
 
 clear_cache() {
@@ -1072,8 +1766,12 @@ clear_cache() {
 	einfo "G_FEEDS_DIR=${G_FEEDS_DIR}"
 	rm -rf "${G_FEEDS_DIR}"
 	rm -rf "${G_JSONS_DIR}"
-	rm -rf "${G_PATCHES_DIR}"
 	rm -rf "${G_LOGS}"
+	rm -rf "${G_PATCHES_DIR}"
+	rm -rf "${G_SPLIT_JSONS_DIR}"
+
+	rm -f "${G_CACHE_FOLDER}/already_downloaded"
+	rm -f "${G_CACHE_FOLDER}/download_list"
 }
 
 arg_parse() {
@@ -1082,21 +1780,37 @@ arg_parse() {
 		arg="${ARGS[0]}"
 		ARGS=("${ARGS[@]:1}")
 		case "$arg" in
-			-s|--kernel-src)
-				G_KERNEL_SOURCE_FOLDER="${ARGS[0]}"
-				ARGS=("${ARGS[@]:1}")
+			-acp|--allow-crash-prevention)
+				G_ALLOW_CRASH_PREVENTION="1"
+				;;
+			-au|--allow-untagged)
+				G_ALLOW_UNTAGGED_COMMITS="1"
 				;;
 			-b|--kernel-bin)
 				G_KERNEL_SOURCE_BIN="${ARGS[0]}"
 				ARGS=("${ARGS[@]:1}")
 				;;
-			-t|--kernel-tag)
-				G_KERNEL_TAG="${ARGS[0]}"
-				ARGS=("${ARGS[@]:1}")
-				;;
 			-c|--cache-folder)
 				G_CACHE_FOLDER="${ARGS[0]}"
 				ARGS=("${ARGS[@]:1}")
+				;;
+			-ca|--cmd-apply)
+				G_REQ_APPLY_PATCHES="1"
+				;;
+			-cj|--cmd-fetch-jsons)
+				G_REQ_FETCH_JSONS="1"
+				;;
+			--curl)
+				G_DOWNLOAD_TOOL="curl"
+				;;
+			-cp|--cmd-fetch-patches)
+				G_REQ_FETCH_PATCHES="1"
+				;;
+			-cr|--cmd-report)
+				G_REQ_REPORT="1"
+				;;
+			-ct|--cmd-dry-test)
+				G_REQ_DRY_TEST="1"
 				;;
 			-d|--delete)
 				G_REQ_CLEAR_CACHE="1"
@@ -1104,49 +1818,35 @@ arg_parse() {
 			-g|--generate-kpatch-modules)
 				G_REQ_BUILD_KPATCHES="1"
 				;;
-			-u|--unattended)
-				G_UNATTENDED="1"
+			-h|--help|-help)
+				echo "${H_HELP}"
+				exit ${EOK}
 				;;
-			-cj|--cmd-fetch-jsons)
-				G_REQ_FETCH_JSONS="1"
-				;;
-			-cp|--cmd-fetch-patches)
-				G_REQ_FETCH_PATCHES="1"
-				;;
-			-ct|--cmd-dry-test)
-				G_REQ_DRY_TEST="1"
-				;;
-			-cr|--cmd-report)
-				G_REQ_REPORT="1"
-				;;
-			-ca|--cmd-apply)
-				G_REQ_APPLY_PATCHES="1"
+			-mn|--min-year)
+				G_MIN_YEAR="${ARGS[0]}"
+				ARGS=("${ARGS[@]:1}")
 				;;
 			-mx|--max-year)
 				G_MAX_YEAR="${ARGS[0]}"
 				ARGS=("${ARGS[@]:1}")
 				;;
-			-mn|--min-year)
-				G_MIN_YEAR="${ARGS[0]}"
+			-s|--kernel-src)
+				G_KERNEL_SOURCE_FOLDER="${ARGS[0]}"
 				ARGS=("${ARGS[@]:1}")
 				;;
 			-t|--temp)
 				G_TEMP_DIR="${ARGS[0]}"
 				ARGS=("${ARGS[@]:1}")
 				;;
-			--curl)
-				G_DOWNLOAD_TOOL="curl"
-				;;
-			--wget)
-				G_DOWNLOAD_TOOL="wget"
+			-u|--unattended)
+				G_UNATTENDED="1"
 				;;
 			--version|-version|-ver)
 				echo "${H_INFO}"
 				exit ${EOK}
 				;;
-			--help|-help|-h)
-				echo "${H_HELP}"
-				exit ${EOK}
+			--wget)
+				G_DOWNLOAD_TOOL="wget"
 				;;
 			*)
 		esac
@@ -1188,10 +1888,10 @@ dedupe_patches_by_hash() {
 	sha1sum "${G_PATCHES_DIR}"/* | sort | cut -c 1-40 > "${t1}"
 	local t2=$(tempfile)
 	sha1sum "${G_PATCHES_DIR}"/* | sort | cut -c 1-40 | uniq > "${t2}"
-	D=$(diff -urp "${t1}" "${t2}" | grep -e "^-" | cut -c 2- | tail -n +2 | uniq)
+	D=$(diff -urp "${t1}" "${t2}" | grep -P -e "^-" | cut -c 2- | tail -n +2 | uniq)
 
 	for d in ${D} ; do
-		F=($(sha1sum "${G_PATCHES_DIR}"/* | grep "${d}" | cut -f3 -d " "))
+		F=($(sha1sum "${G_PATCHES_DIR}"/* | grep -F -e "${d}" | cut -f3 -d " "))
 		F=(${F[@]:1})
 		while (( ${#F[@]} > 0 )) ; do
 			f="${F[0]}"
@@ -1207,16 +1907,21 @@ dedupe_patches_by_hash() {
 # git repo.
 tidy_patches() {
 	einfo "Running patch tidy"
-	for f in $(ls "${G_PATCHES_DIR}"/*.patch) ; do
-		local t=$(tempfile)
-		if ! ( cat "${f}" | head -n 1 | tail -n +1 \
+
+	P=$(ls "${G_PATCHES_DIR}"/*.patch)
+	if [[ "$?" != "0" ]] ; then
+		return
+	fi
+
+	for p in ${P} ; do
+		if ! ( cat "${p}" | head -n 1 | tail -n +1 \
 			| grep -q -P -e "^From [0-9a-z]{40} " )
 		then
-			einfo "Tidying ${f}"
-			filterdiff "${f}" > "${t}"
-			mv "${t}" "${f}"
+			einfo "Tidying ${p}"
+			local t=$(tempfile)
+			filterdiff "${p}" > "${t}"
+			mv "${t}" "${p}"
 		fi
-		[ -e "${t}" ] && rm "${t}"
 	done
 }
 
@@ -1309,6 +2014,11 @@ ${G_MAX_YEAR_LIMIT}"
 	fi
 }
 
+clear_downloads() {
+	[[ -f "${G_CACHE_FOLDER}/download_list" ]] \
+		&& rm "${G_CACHE_FOLDER}/download_list"
+}
+
 main() {
 	einfo "Project is still WIP"
 
@@ -1321,16 +2031,17 @@ main() {
 	local X_PATCH_META_VERSION
 	local X_TUXPARONI_URL_RESOLVER_HASH
 	local need_wipe=0
+	einfo "CPU Cores=${G_CORES}"
 
 	if [[ -f "${G_CACHE_FOLDER}/status" ]] ; then
 		X_VERSION=$(\
-			grep -e "tuxparoni_version:" "${G_CACHE_FOLDER}/status" \
+			grep -F -e "tuxparoni_version:" "${G_CACHE_FOLDER}/status" \
 			| cut -f2 -d $' ')
 		X_PATCH_META_VERSION=$(\
-			grep -e "meta_version:" "${G_CACHE_FOLDER}/status" \
+			grep -F -e "meta_version:" "${G_CACHE_FOLDER}/status" \
 			| cut -f2 -d $' ')
 		X_TUXPARONI_URL_RESOLVER_HASH=$(\
-			grep -e "resolver_hash:" "${G_CACHE_FOLDER}/status" \
+			grep -F -e "resolver_hash:" "${G_CACHE_FOLDER}/status" \
 			| cut -f2 -d $' ')
 
 		[[ "${X_VERSION}" != "${G_VERSION}" ]] \
@@ -1347,16 +2058,18 @@ main() {
 		clear_cache
 	fi
 
+	clear_downloads
+
 	# this is used to wipe the cache if necessary
 	echo "tuxparoni_version: ${G_VERSION}" > "${G_CACHE_FOLDER}/status"
 	echo "meta_version: ${G_PATCH_META_VERSION}" >> "${G_CACHE_FOLDER}/status"
 	echo "resolver_hash: ${G_TUXPARONI_URL_RESOLVER_HASH}" >> "${G_CACHE_FOLDER}/status"
 
 	G_KERNEL_TAG=$(get_tag)
-	local ver=$(echo ${G_KERNEL_TAG} | cut -f1 -d "-")
+	G_KERNEL_VER=$(echo ${G_KERNEL_TAG} | cut -f1 -d "-")
 	einfo "Kernel tag: ${G_KERNEL_TAG}"
 
-	G_KERNEL_TIMESTAMP=$(get_kernel_timestamp "${ver}")
+	G_KERNEL_TIMESTAMP=$(get_kernel_timestamp "${G_KERNEL_VER}")
 	einfo "Kernel release timestamp: ${G_KERNEL_TIMESTAMP}   "\
 $(date -d "@${G_KERNEL_TIMESTAMP}")
 
@@ -1371,7 +2084,7 @@ $(date -d "@${G_KERNEL_TIMESTAMP}")
 	setup_cache
 	[[ "${G_REQ_FETCH_JSONS}" == "1" ]] && fetch_feeds
 	[[ "${G_REQ_FETCH_JSONS}" == "1" ]] && unpack_feeds
-	[[ "${G_REQ_FETCH_JSONS}" == "1" ]] && filter_jsons
+	[[ "${G_REQ_FETCH_JSONS}" == "1" ]] && split_jsons
 	[[ "${G_REQ_FETCH_PATCHES}" == "1" ]] && fetch_patches
 	[[ "${G_REQ_FETCH_PATCHES}" == "1" ]] && dedupe_patches_by_hash
 	[[ "${G_REQ_FETCH_PATCHES}" == "1" ]] && tidy_patches

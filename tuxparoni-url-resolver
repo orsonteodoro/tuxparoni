@@ -2,17 +2,20 @@
 # This module and data is public domain.
 # The links are derived from NVD json files which are in public domain.
 
-#1234567890123456789012345678901234567890123456789012345678901234567890123456789
+# This list is still WIP and incomplete
 
 # fixes rejected urls
+# WIP set.  It needs to backtrack further.
 fix_direct_download() {
-	local url="${1}"
+	url="${1}"
 	local cve_id="${2}"
+	local ourl="${1}"
 
 	# from ./tuxparoni 2>&1 | tee log.txt
 	# obtained from grep -r -e "Rejected" log.txt | sort
 
 	# clustered by original domain
+	# each domain-grouping is backtracked independently together
 
 	# url is same as get_patch_direct_link()
 	# located by root thread; converted url to github.com/torvalds from email body and content bodies of both commit and patch or commit subject
@@ -395,15 +398,654 @@ fix_direct_download() {
 	[[ "${url}" == "https://git.kernel.org/pub/scm/linux/kernel/git/x86/linux-2.6-tip.git/patch/?id=24e35800cdc4350fc34e2bed37b608a9e13ab3b6" ]] \
 		&& url="https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/commit/?id=24e35800cdc4350fc34e2bed37b608a9e13ab3b6"
 
-	#[[ "${url}" == "" ]] \
-	#	&& url=""
+	# 5.3
+	[[ "${url}" == "https://lore.kernel.org/lkml/20191001165611.GA3542072@kroah.com/raw" ]] \
+		&& url="https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/patch/?id=bbe837675455975d4a52ccfcc47006107b12a893"
+
 	#[[ "${url}" == "" ]] \
 	#	&& url=""
 
-	echo "${url}"
+	if [[ "${ourl}" != "${url}" ]] ; then
+		is_substituted_url="1"
+	fi
 }
 
-process_multipatch() {
+# return 0 if it is multipatch, 1 process normally
+queue_multipatch() {
+	local url="${1}"
+	local cve_id="${2}"
+
+	# for codeaurora tags
+	# tag1 branch
+	# tag2 versioned module in url
+
+	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/multiple-memory-corruption-issues-in-write-operation-in-qdsp6v2-voice-service-driver-cve-2016-5343" ]] ; then
+		is_substituted_url="1"
+		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=6927e2e0af4dcac357be86ba563c9ae12354bb08"
+		tag1="LA.BR.5.6"
+		tag2="msm-3.18"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/config_strict_memory_rwx-is-not-strictly-enforced-cve-2013-4737" ]] ; then
+		is_substituted_url="1"
+		url="https://source.codeaurora.org/quic/la/kernel/msm/patch/?id=4256415b296348ff16cd17a5b8f8dce4dea37328"
+		tag1="android-msm-2.6.29"
+		tag2="msm-3.x-jb-ics"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/improper-input-validation-in-mdp-driver-when-processing-color-maps-cve-2014-4323" ]] ; then
+		is_substituted_url="1"
+		url="https://source.codeaurora.org/quic/la/kernel/msm-3.10/patch/?id=014fa8def84c62893fa016e873c12de1da498603"
+		tag1="APSS.FSM.3.0"
+		tag2="msm-3.10"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/integer-overflow-and-signedness-issue-in-camera-jpeg-engines-cve-2013-4736" ]] ; then
+		is_substituted_url="1"
+		url="https://source.codeaurora.org/quic/la/kernel/msm/patch/?id=fab0bc54f4b70fd1d85300731822379a487d66ca"
+		tag1="android-msm-2.6.29"
+		tag2="msm-3.x-jb"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://source.codeaurora.org/quic/la/kernel/msm/patch/?id=8c5300aec8cd9882b89e9d169680221541da0d7f"
+		tag1="android-msm-2.6.29"
+		tag2="msm-3.x-jb-ics-gingerbread"
+		index="0"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://source.codeaurora.org/quic/la/kernel/msm/patch/?id=81947189009afcfac17d1106101260c660421265"
+		tag1="android-msm-2.6.29"
+		tag2="msm-3.x-jb-ics-gingerbread"
+		index="1"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/lk-insufficient-verification-of-tag_addr-when-loading-device-tree-cve-2014-0974" ]] ; then
+		is_substituted_url="1"
+		url="https://source.codeaurora.org/quic/la/kernel/lk/patch/?id=5e68eb8a09820d8447cb209558fbc237fcbfc41f"
+		tag1="master"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/memory-corruption-in-qseecom-driver-cve-2014-4322" ]] ; then
+		is_substituted_url="1"
+		url="https://source.codeaurora.org/quic/la/kernel/msm-3.10/patch/?id=b9470692c228608ef0ec60747ac2732ad7ffedf0"
+		tag1="APSS.FSM.3.0"
+		tag2="msm-3.10"
+		index="0"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://source.codeaurora.org/quic/la/kernel/msm-3.10/patch/?id=e909d95e6bded328e388d5b8d123297bbbb70728"
+		tag1="APSS.FSM.3.0"
+		tag2="msm-3.10"
+		index="1"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/missing-access-checks-in-put_userget_user-kernel-api-cve-2013-6282" ]] ; then
+		is_substituted_url="1"
+		url="https://source.codeaurora.org/quic/la/kernel/msm/patch/?id=76565e3d786bed66f247c682bd9f591098522483"
+		tag1="android-msm-2.6.29"
+		tag2="msm-3.4-jb-ics"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/multiple-issues-in-camera-drivers-cve-2014-9410-cve-2015-0568" \
+		&& "${cve_id}" == "CVE-2014-9410" ]] ; then
+		is_substituted_url="1"
+		url="https://www.codeaurora.org/patches/quic/la/PATCH_8064_113026_check_vfe_cmd_usage_20150728.tar.gz"
+		exclude_binary=1
+		enqueue_download "${url}" "${cve_id}"
+		exclude_binary=0
+		return 0
+	fi
+	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/multiple-issues-in-camera-drivers-cve-2014-9410-cve-2015-0568" \
+		&& "${cve_id}" == "CVE-2015-0568" ]] ; then
+		is_substituted_url="1"
+		url="https://www.codeaurora.org/patches/quic/la/PATCH_8064_113028_cropinfo_pointer_fix_20150728.tar.gz"
+		exclude_binary=1
+		enqueue_download "${url}" "${cve_id}"
+		exclude_binary=0
+		return 0
+	fi
+	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/multiple-memory-corruption-issues-and-race-condition-in-goodix-gt915-touchscreen-driver-procfs-handler-cve-2013-4740-cve-2013-6122" ]] ; then
+		is_substituted_url="1"
+		url="https://source.codeaurora.org/quic/la/kernel/msm-3.10/patch/?id=f53bcf29a6e7a66b3d935b8d562fa00829261f05"
+		tag1="APSS.FSM.3.0"
+		tag2="msm-3.10"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/buffer-overflow-in-msm_vidc-debugfs-driver-core_info_read-and-inst_info_read-cve-2017-8244" ]] ; then
+		is_substituted_url="1"
+		url="https://source.codeaurora.org/quic/la/kernel/msm-3.10/patch/?id=f51b0f3b9da62e96b0167a3eb3376fca39fc7baf"
+		tag1="APSS.FSM.3.0"
+		tag2="msm-3.10"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=01673e148223c10782b03c5485aff2a82b1900c4"
+		tag1="LA.BR.5.6"
+		tag2="msm-3.18"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://source.codeaurora.org/quic/la/kernel/msm-4.4/patch/?id=fe3bdd12315656347d1bca82d920b3df1a2b0e8a"
+		tag1="BosSen-msm-44"
+		tag2="msm-4.4"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/buffer-overflow-vulnerability-in-wcnss_wlan_write-cve-2016-5342" ]] ; then
+		is_substituted_url="1"
+		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=579e796cb089324c55e0e689a180575ba81b23d9"
+		tag1="LA.BR.5.6"
+		tag2="msm-3.18"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/insufficient-memory-address-information-to-prevent-arbitrary-memory-access-from-qsee-secure-applications-cve-2016-5349" ]] ; then
+		is_substituted_url="1"
+		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=8d26e8eec156708c5a3d24502702638c9e265e8d"
+		tag1="LA.BR.5.6"
+		tag2="msm-3.18"
+		index="0"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=b54cce804d722b1e7fe137a589fca5fd9e99a0a6"
+		tag1="LA.BR.5.6"
+		tag2="msm-3.18"
+		index="1"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=4a3e522b0db0a340073668b15785bcd87783e0f6"
+		tag1="LA.BR.5.6"
+		tag2="msm-3.18"
+		index="2"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=9bd398661cae758ffc557adc7de74ba32654e1f9"
+		tag1="LA.BR.5.6"
+		tag2="msm-3.18"
+		index="3"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/integer-overflow-in-mdss-driver-cve-2016-5344" ]] ; then
+		is_substituted_url="1"
+		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=1d2297267c24f2c44bd0ecb244ddb8bc880a29b7"
+		tag1="LA.BR.5.6"
+		tag2="msm-3.18"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/invalid-path-check-on-ashmem-memory-file-cve-2016-5340" ]] ; then
+		is_substituted_url="1"
+		url="https://source.codeaurora.org/quic/la/kernel/msm-3.10/patch/?id=06e51489061e5473b4e2035c79dcf7c27a6f75a6"
+		tag1="APSS.FSM.3.0"
+		tag2="msm-3.10"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/multiple-memory-corruption-issues-in-write-operation-in-qdsp6v2-voice-service-driver-cve-2016-5343" ]] ; then
+		is_substituted_url="1"
+		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=6927e2e0af4dcac357be86ba563c9ae12354bb08"
+		tag1="LA.BR.5.6"
+		tag2="msm-3.18"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/multiple-vulnerabilities-in-msm-qdsp6-audio-driver-allow-kernel-memory-corruption-cve-2016-2064-cve-2016-2065-cve-2016-2066" ]] ; then
+		is_substituted_url="1"
+		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=775fca8289eff931f91ff6e8c36cf2034ba59e88"
+		tag1="LA.BR.5.6"
+		tag2="msm-3.18"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/null-pointer-dereference-when-processing-accept-system-call-by-user-process-on-af_msm_ipc-sockets-cve-2016-5870" ]] ; then
+		is_substituted_url="1"
+		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=71fe5361cbef34e2d606b79e8936a910a3e95566"
+		tag1="LA.BR.5.6"
+		tag2="msm-3.18"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/out-of-bounds-read-when-processing-a-voice-svc-request-cve-2017-8245" ]] ; then
+		is_substituted_url="1"
+		url="https://source.codeaurora.org/quic/la/kernel/msm-3.10/patch/?id=ececf97911515114030bef1fc6df630dbb706f17"
+		tag1="APSS.FSM.3.0"
+		tag2="msm-3.10"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=f53af3805879292423465cd0877cc7a75131ce10"
+		tag1="LA.BR.5.6"
+		tag2="msm-3.18"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://source.codeaurora.org/quic/la/kernel/msm-4.4/patch/?id=5b2f6e011ba92f28e8d7dbeb11c4ee7344c33186"
+		tag1="BosSen-msm-44"
+		tag2="msm-4.4"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/privilege-escalation-vulnerability-in-graphics-driver-cve-2016-2067" ]] ; then
+		is_substituted_url="1"
+		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=410cfa95f0a1cf58819cbfbd896f9aa45b004ac0"
+		tag1="LA.BR.5.6"
+		tag2="msm-3.18"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+
+	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/multiple-issues-in-wlan-driver-allow-local-privilege-escalation-cve-2015-0569-cve-2015-0570-cve-2015-0571" \
+		&& "${cve_id}" == "CVE-2015-0569" ]] ; then
+		is_substituted_url="1"
+		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=a079d716b5481223f0166c644e9ec7c75a31b02c"
+		tag1="master"
+		tag2="qcald-2.0"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+
+	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/multiple-issues-in-wlan-driver-allow-local-privilege-escalation-cve-2015-0569-cve-2015-0570-cve-2015-0571" \
+		&& "${cve_id}" == "CVE-2015-0570" ]] ; then
+		is_substituted_url="1"
+		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=8bd73c3452ab22ba9bdbaac5ab12de2ed25fcb9d"
+		tag1="master"
+		tag2="qcald-2.0"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+
+	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/multiple-issues-in-wlan-driver-allow-local-privilege-escalation-cve-2015-0569-cve-2015-0570-cve-2015-0571" \
+		&& "${cve_id}" == "CVE-2015-0571" ]] ; then
+		is_substituted_url="1"
+		tag1="master"
+		tag2="qcald-2.0"
+
+		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=6feb2faf80a05940618aa2eef2b62e4e2e54f148"
+		index="00"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=fe4208157c899a5de4d6769d13f6620fc32ebfa9"
+		index="01"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=0e53a89bfe0dbb50e0dde9a6960d274386247cd9"
+		index="02"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=88ce639e7a0bba852f193b6f53b7ca1926a09b02"
+		index="03"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=0858d21caf17d56f8d2353590c1ec245073222e0"
+		index="04"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=2905578424256be07e6b9d8c63bb83d40cc52a71"
+		index="05"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=be62ecde85228b91c66fb047e27d25132f56bd0d"
+		index="06"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=aaeeed43f9597631982835481c7cf2621f6455f0"
+		index="07"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=6642bccf3ed8cba176dee7d4bbc21fc4580efb7b"
+		index="08"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=6665a9697b404acf4d2e7d52d9c2b19512c9b239"
+		index="09"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=9eeafd788f53cc37c169b299f91ca9c558b228f9"
+		index="10"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=55bdc6d1c88a100dc4a71bf855b69db522c9b5b5"
+		index="11"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=fb9fb202c71547dba648c9b08d97645c6f42ca6e"
+		index="12"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+
+	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/stack-based-buffer-overflow-in-msm-thermal-driver-allows-kernel-memory-corruption-cve-2016-2063" ]] ; then
+		is_substituted_url="1"
+		url="https://source.codeaurora.org/quic/la/kernel/msm-3.10/patch/?id=ab3f46119ca10de87a11fe966b0723c48f27acd4"
+		tag1="APSS.FSM.3.0"
+		tag2="msm-3.10"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/uninitialized-channel-map-array-can-leak-data-to-user-space-in-qdsp6v2-driver-cve-2016-5347" ]] ; then
+		is_substituted_url="1"
+		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=ed4d6f5d8451d99860950d0abf8ad583efed6d5c"
+		tag1="LA.BR.5.6"
+		tag2="msm-3.18"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://source.codeaurora.org/quic/la//kernel/msm-4.4/commit/?id=f14390f13e62460fc6b05fc0acde0e825374fdb6"
+		tag1="BosSen-msm-44"
+		tag2="msm-4.4"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/use-after-free-in-alsa-pcm-playback-kernel-module-cve-2017-8246" ]] ; then
+		is_substituted_url="1"
+		url="https://source.codeaurora.org/quic/la/kernel/msm-3.10/patch/?id=578eb74435eccdc3df516fd744941a7d872fac6c"
+		tag1="APSS.FSM.3.0"
+		tag2="msm-3.10"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=30baaec8afb05abf9f794c631ad944838d498ab8"
+		tag1="LA.BR.5.6"
+		tag2="msm-3.18"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://source.codeaurora.org/quic/la/kernel/msm-4.4/patch/?id=9734b72ae21eca557540c3c42d356dd131a20004"
+		tag1="BosSen-msm-44"
+		tag2="msm-4.4"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+
+	if [[ "${url}" == "https://marc.info/?t=150525503100001&r=1&w=2&q=mbox" ]] ; then
+		is_substituted_url="1"
+		url="https://github.com/torvalds/linux/commit/e785fa0a164aa11001cba931367c7f94ffaff888.patch" #1
+		index="0"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://github.com/torvalds/linux/commit/3ea15452ee85754f70f3b9fa1f23165ef2e77ba7.patch" #2
+		index="1"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+
+	if [[ "${url}" == "https://seclists.org/oss-sec/2015/q4/425" ]] ; then
+		is_substituted_url="1"
+		url="https://github.com/torvalds/linux/commit/f079fa005aae08ee0e1bc32699874ff4f02e11c1.patch" # 1
+		index="0"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://github.com/torvalds/linux/commit/e7358f54a3954df16d4f87e3cad35063f1c17de5.patch" # 2
+		index="1"
+		enqueue_download "${url}" "${cve_id}"
+
+		# skip https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/patch/?id=46e8a249423ff98e250c9dee2a37906061808b33 # 3 applies to linux-firmware package
+
+		url="https://github.com/torvalds/linux/commit/5e091e7ad0baa84a401b4dc3f859890990f0854f.patch" # 4 (may not be necessary for newer)
+		index="2"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+
+	if [[ "${url}" == "https://openwall.com/lists/oss-security/2015/05/29/5" ]] ; then
+		is_substituted_url="1"
+		url="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/?id=820f9f147dcce2602eefd9b575bbbd9ea14f0953" # 1
+		index="0"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/?id=cd4a40174b71acd021877341684d8bb1dc8ea4ae" # 2
+		index="1"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+
+	if [[ "${url}" == "https://www.openwall.com/lists/oss-security/2019/11/27/1" ]] ; then
+		is_substituted_url="1"
+		url="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/?id=39e72bf96f5847ba87cc5bd7a3ce0fed813dc9ad" # 1
+		index="0"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/?id=af2e8c68b9c5403f77096969c516f742f5bb29e0" # 2
+		index="1"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+
+	if [[ "${url}" == "https://www.openwall.com/lists/oss-security/2017/06/12/2" ]] ; then
+		is_substituted_url="1"
+		url="https://github.com/torvalds/linux/commit/d11662f4f798b50d8c8743f433842c3e40fe3378.patch" # 1
+		index="0"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://github.com/torvalds/linux/commit/ba3021b2c79b2fa9114f92790a99deb27a65b728.patch" # 2
+		index="1"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+
+	if [[ "${url}" == "https://www.openwall.com/lists/oss-security/2017/06/27/5" ]] ; then
+		is_substituted_url="1"
+		url="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/fs/nfsd?id=b550a32e60a4941994b437a8d662432a486235a5" # 1
+		index="0"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/fs/nfsd?id=f961e3f2acae94b727380c0b74e2d3954d0edf79" # 2
+		index="1"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+
+	if [[ "${url}" == "https://www.openwall.com/lists/oss-security/2017/09/15/4" ]] ; then
+		is_substituted_url="1"
+                htags="5.5 5.4 5.3 5.2 5.1 5.0 4.20 4.19 4.18 4.17 4.16 4.15 4.14"
+		url="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/?id=3a8b0677fc6180a467e26cc32ce6b0c09a32f9bb" # 1
+		index="0"
+		enqueue_download "${url}" "${cve_id}"
+
+                htags="5.5 5.4 5.3 5.2 5.1 5.0 4.20 4.19 4.18 4.17 4.16 4.15 4.14"
+		url="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/?id=36ae3c0a36b7456432fedce38ae2f7bd3e01a563" # 2
+		index="1"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+
+	if [[ "${url}" == "https://www.openwall.com/lists/oss-security/2018/10/02/2" ]] ; then
+		is_substituted_url="1"
+                htags="5.5 5.4 5.3 5.2 5.1 5.0 4.20 4.19"
+		url="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/?id=d26c25a9d19b5976b319af528886f89cf455692d" # 1
+		index="0"
+		enqueue_download "${url}" "${cve_id}"
+
+                htags="5.5 5.4 5.3 5.2 5.1 5.0 4.20 4.19"
+		url="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/?id=2a3f93459d689d990b3ecfbe782fec89b97d3279" # 2
+		index="1"
+		enqueue_download "${url}" "${cve_id}"
+
+                htags="4.14"
+		url="https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/patch/?id=38d070f9090af15b5bdb26fc0e084b22f34eabd9" # 1
+		index="0"
+		enqueue_download "${url}" "${cve_id}"
+
+                htags="4.14"
+		url="https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/patch/?id=fcaca557760f4fd78e793d8bfc4364fb58d7fb85" # 2
+		index="0"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+
+	if [[ "${url}" == "https://www.mail-archive.com/linux-kernel@vger.kernel.org/msg1408967.html" ]] ; then
+		is_substituted_url="1"
+		url="https://patchwork.kernel.org/patch/9755753/mbox/" # 1
+		index="0"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://patchwork.kernel.org/patch/9755757/mbox/" # 2
+		index="1"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+
+	if [[ "${url}" == "https://marc.info/?l=linux-netdev&m=149200746116366&q=mbox" ]] ; then
+		is_substituted_url="1"
+		url="https://marc.info/?l=linux-netdev&m=149200746116365&q=mbox" # 1
+		index="0"
+		enqueue_download "${url}" "${cve_id}"
+
+		url="https://marc.info/?l=linux-netdev&m=149200742616349&q=mbox" # 2
+		index="1"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+	fi
+
+	if [[ "${url}" == "https://github.com/torvalds/linux/commit/6f3ef5c25cc762687a7341c18cbea5af54461407.patch" ]] ; then
+		is_substituted_url="0"
+		is_direct_url="1"
+
+		# for CVE_2019_19051
+                htags="5.4 5.5"
+		url="https://github.com/torvalds/linux/commit/6f3ef5c25cc762687a7341c18cbea5af54461407.patch" # 1
+		index="0"
+		enqueue_download "${url}" "${cve_id}"
+
+		is_substituted_url="1"
+		is_direct_url="0"
+
+                htags="5.3 5.4 5.5"
+		url="https://github.com/torvalds/linux/commit/2507e6ab7a9a440773be476141a255934468c5ef.patch" # 2
+		index="1"
+		enqueue_download "${url}" "${cve_id}"
+
+		if [[ "${G_ALLOW_CRASH_PREVENTION}" == "1" ]] ; then
+	                htags="5.3"
+			url="https://github.com/torvalds/linux/commit/44ef3a03252844a8753479b0cea7f29e4a804bdc.patch" # unreported in NVD
+			index="2"
+			enqueue_download "${url}" "${cve_id}"
+
+	                htags="4.14"
+			url="https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/patch/?id=0aca28be510cdf57c6615ec6971fe1077bed207e" # unreported in NVD
+			index="3"
+			enqueue_download "${url}" "${cve_id}"
+		fi
+		return 0
+	fi
+
+	if [[ "${cve_id}" == "CVE-2019-16229" && "${url}" == "https://lkml.org/lkml/diff/2019/9/9/487/1" ]] ; then
+		is_direct_url="1"
+		enqueue_download "${url}" "${cve_id}"
+                return 0
+	fi
+
+	if [[ "${cve_id}" == "CVE-2019-16230" && "${url}" == "https://lkml.org/lkml/diff/2019/9/9/487/1" ]] ; then
+		is_direct_url="1"
+		enqueue_download "${url}" "${cve_id}"
+                return 0
+	fi
+
+	if [[ "${cve_id}" == "CVE-2019-16231" && "${url}" == "https://lkml.org/lkml/diff/2019/9/9/487/1" ]] ; then
+		is_direct_url="1"
+		enqueue_download "${url}" "${cve_id}"
+                return 0
+	fi
+
+	if [[ "${cve_id}" == "CVE-2019-16232" && "${url}" == "https://lkml.org/lkml/diff/2019/9/9/487/1" ]] ; then
+		is_direct_url="1"
+		enqueue_download "${url}" "${cve_id}"
+                return 0
+	fi
+
+	if [[ "${cve_id}" == "CVE-2019-16233" && "${url}" == "https://lkml.org/lkml/diff/2019/9/9/487/1" ]] ; then
+		is_direct_url="1"
+		enqueue_download "${url}" "${cve_id}"
+                return 0
+	fi
+
+	if [[ "${cve_id}" == "CVE_2019_17075" && "${url}" == "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/patch/?id=bbe837675455975d4a52ccfcc47006107b12a893" ]] ; then
+		is_substituted_url="0"
+		is_direct_url="1"
+
+		# for 5.3
+                htags="5.3"
+		index="0"
+		enqueue_download "${url}" "${cve_id}"
+
+		is_substituted_url="1"
+		is_direct_url="0"
+
+		# backport for 4.9
+                htags="4.9"
+		url="https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/patch/?id=84f5b67df81a9f333afa81855f6fa3fdcd954463"
+		index="1"
+		enqueue_download "${url}" "${cve_id}"
+
+		# backport for 4.14 ltr
+                htags="4.14"
+		url="https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/patch/?id=1db19d6805d9dc5c79f8a19dddde324dbf0a33f9"
+		index="2"
+		enqueue_download "${url}" "${cve_id}"
+
+		# forward port for 5.4
+                htags="5.4 5.3"
+		url="https://github.com/torvalds/linux/commit/3840c5b78803b2b6cc1ff820100a74a092c40cbb.patch"
+		index="3"
+		enqueue_download "${url}" "${cve_id}"
+                return 0
+	fi
+
+	if [[ "${cve_id}" == "CVE-2019-19062" \
+		&& "${download_url}" == "https://github.com/torvalds/linux/commit/ffdde5932042600c6807d46c1550b28b0db6a3bc.patch" ]] ; then
+		# CVE-2019-19062
+
+		# ffdde for 5.5
+                htags="5.5"
+		index="0"
+		is_substituted_url="0"
+		is_direct_url="1"
+		enqueue_download "${url}" "${cve_id}"
+
+		is_substituted_url="1"
+		is_direct_url="0"
+
+		# for 4.14 ltr, 5.3
+                htags="4.14"
+		url="https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/patch/?id=41b3b8e0775465c33083ce1998df7f15c039c9bf"
+		index="1"
+		enqueue_download "${url}" "${cve_id}"
+
+		# for 4.14 ltr
+                htags="5.3"
+		url="https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/patch/?id=ceddd48c8407c4d1c70a815ae229f34c9af44273"
+		index="2"
+		enqueue_download "${url}" "${cve_id}"
+                return 0
+	fi
+
+	if [[ "${cve_id}" == "CVE-2019-19227" \
+		&& "${download_url}" == "https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/?id=9804501fa1228048857910a6bf23e085aade37cc" ]] ; then
+		# CVE-2019-19227
+
+		# 9804 for >=5.1
+                htags="5.1 5.3"
+		index="0"
+		is_substituted_url="0"
+		is_direct_url="1"
+		enqueue_download "${url}" "${cve_id}"
+
+                # for 4.14 ltr
+                htags="4.14"
+                url="https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/patch/?id=39de8cc3678f5cd1f4e0ae274c20acabbd85a8b1"
+		is_substituted_url="1"
+		is_direct_url="0"
+		index="1"
+		enqueue_download "${url}" "${cve_id}"
+                return 0
+	fi
+
+	return 1
+}
+
+pre_process_patch() {
 	local url="${1}"
 	local cve_id="${2}"
 	local src="${3}"
@@ -412,470 +1054,54 @@ process_multipatch() {
 	# tag1 branch
 	# tag2 versioned module in url
 
-	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/multiple-memory-corruption-issues-in-write-operation-in-qdsp6v2-voice-service-driver-cve-2016-5343" ]] ; then
-		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=6927e2e0af4dcac357be86ba563c9ae12354bb08"
-		tag1="LA.BR.5.6"
-		tag2="msm-3.18"
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/config_strict_memory_rwx-is-not-strictly-enforced-cve-2013-4737" ]] ; then
-		url="https://source.codeaurora.org/quic/la/kernel/msm/patch/?id=4256415b296348ff16cd17a5b8f8dce4dea37328"
-		tag1="android-msm-2.6.29"
-		tag2="msm-3.x-jb-ics"
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/improper-input-validation-in-mdp-driver-when-processing-color-maps-cve-2014-4323" ]] ; then
-		url="https://source.codeaurora.org/quic/la/kernel/msm-3.10/patch/?id=014fa8def84c62893fa016e873c12de1da498603"
-		tag1="APSS.FSM.3.0"
-		tag2="msm-3.10"
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/integer-overflow-and-signedness-issue-in-camera-jpeg-engines-cve-2013-4736" ]] ; then
-		url="https://source.codeaurora.org/quic/la/kernel/msm/patch/?id=fab0bc54f4b70fd1d85300731822379a487d66ca"
-		tag1="android-msm-2.6.29"
-		tag2="msm-3.x-jb"
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://source.codeaurora.org/quic/la/kernel/msm/patch/?id=8c5300aec8cd9882b89e9d169680221541da0d7f"
-		tag1="android-msm-2.6.29"
-		tag2="msm-3.x-jb-ics-gingerbread"
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://source.codeaurora.org/quic/la/kernel/msm/patch/?id=81947189009afcfac17d1106101260c660421265"
-		tag1="android-msm-2.6.29"
-		tag2="msm-3.x-jb-ics-gingerbread"
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/lk-insufficient-verification-of-tag_addr-when-loading-device-tree-cve-2014-0974" ]] ; then
-		url="https://source.codeaurora.org/quic/la/kernel/lk/patch/?id=5e68eb8a09820d8447cb209558fbc237fcbfc41f"
-		tag1="master"
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/memory-corruption-in-qseecom-driver-cve-2014-4322" ]] ; then
-		url="https://source.codeaurora.org/quic/la/kernel/msm-3.10/patch/?id=b9470692c228608ef0ec60747ac2732ad7ffedf0"
-		tag1="APSS.FSM.3.0"
-		tag2="msm-3.10"
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://source.codeaurora.org/quic/la/kernel/msm-3.10/patch/?id=e909d95e6bded328e388d5b8d123297bbbb70728"
-		tag1="APSS.FSM.3.0"
-		tag2="msm-3.10"
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/missing-access-checks-in-put_userget_user-kernel-api-cve-2013-6282" ]] ; then
-		url="https://source.codeaurora.org/quic/la/kernel/msm/patch/?id=76565e3d786bed66f247c682bd9f591098522483"
-		tag1="android-msm-2.6.29"
-		tag2="msm-3.4-jb-ics"
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/multiple-issues-in-camera-drivers-cve-2014-9410-cve-2015-0568" \
+	if [[ "${url}" == "https://www.codeaurora.org/patches/quic/la/PATCH_8064_113026_check_vfe_cmd_usage_20150728.tar.gz" \
 		&& "${cve_id}" == "CVE-2014-9410" ]] ; then
-		url="https://www.codeaurora.org/patches/quic/la/PATCH_8064_113026_check_vfe_cmd_usage_20150728.tar.gz"
-		[[ -e "${G_TEMP_DIR}/PATCH_8064_113026_check_vfe_cmd_usage_20150728.tar.gz" ]] \
-			&& rm -f "${G_TEMP_DIR}/PATCH_8064_113026_check_vfe_cmd_usage_20150728.tar.gz" > /dev/null
-		download "${G_TEMP_DIR}/PATCH_8064_113026_check_vfe_cmd_usage_20150728.tar.gz" "${url}"
+		mv "${src}" "${G_TEMP_DIR}/PATCH_8064_113026_check_vfe_cmd_usage_20150728.tar.gz"
 		tar -xvf "${G_TEMP_DIR}/PATCH_8064_113026_check_vfe_cmd_usage_20150728.tar.gz"
 		mv "${G_TEMP_DIR}/msm.git-43b4ff3bf3fbb02e85defcea939629f46506a217.patch" "${src}"
-		_process_patch
 		rm "${G_TEMP_DIR}/PATCH_8064_113026_check_vfe_cmd_usage_20150728.tar.gz"
-		return 0
 	fi
-	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/multiple-issues-in-camera-drivers-cve-2014-9410-cve-2015-0568" \
+
+	if [[ "${url}" == "https://www.codeaurora.org/patches/quic/la/PATCH_8064_113028_cropinfo_pointer_fix_20150728.tar.gz" \
 		&& "${cve_id}" == "CVE-2015-0568" ]] ; then
-		url="https://www.codeaurora.org/patches/quic/la/PATCH_8064_113028_cropinfo_pointer_fix_20150728.tar.gz"
-		[[ -e "${G_TEMP_DIR}/PATCH_8064_113028_cropinfo_pointer_fix_20150728.tar.gz" ]] \
-			&& rm -f "${G_TEMP_DIR}/PATCH_8064_113028_cropinfo_pointer_fix_20150728.tar.gz" > /dev/null
-		download "${G_TEMP_DIR}/PATCH_8064_113028_cropinfo_pointer_fix_20150728.tar.gz" "${url}"
+		mv "${src}" "${G_TEMP_DIR}/PATCH_8064_113028_cropinfo_pointer_fix_20150728.tar.gz"
 		tar -xvf "${G_TEMP_DIR}/PATCH_8064_113028_cropinfo_pointer_fix_20150728.tar.gz"
 		mv "${G_TEMP_DIR}/msm.git-8de3fe39e7c40190f82832253ed5946714e5bff1.patch" "${src}"
-		_process_patch
 		rm "${G_TEMP_DIR}/PATCH_8064_113028_cropinfo_pointer_fix_20150728.tar.gz"
-		return 0
-	fi
-	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/multiple-memory-corruption-issues-and-race-condition-in-goodix-gt915-touchscreen-driver-procfs-handler-cve-2013-4740-cve-2013-6122" ]] ; then
-		url="https://source.codeaurora.org/quic/la/kernel/msm-3.10/patch/?id=f53bcf29a6e7a66b3d935b8d562fa00829261f05"
-		tag1="APSS.FSM.3.0"
-		tag2="msm-3.10"
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/buffer-overflow-in-msm_vidc-debugfs-driver-core_info_read-and-inst_info_read-cve-2017-8244" ]] ; then
-		url="https://source.codeaurora.org/quic/la/kernel/msm-3.10/patch/?id=f51b0f3b9da62e96b0167a3eb3376fca39fc7baf"
-		tag1="APSS.FSM.3.0"
-		tag2="msm-3.10"
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=01673e148223c10782b03c5485aff2a82b1900c4"
-		tag1="LA.BR.5.6"
-		tag2="msm-3.18"
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://source.codeaurora.org/quic/la/kernel/msm-4.4/patch/?id=fe3bdd12315656347d1bca82d920b3df1a2b0e8a"
-		tag1="BosSen-msm-44"
-		tag2="msm-4.4"
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/buffer-overflow-vulnerability-in-wcnss_wlan_write-cve-2016-5342" ]] ; then
-		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=579e796cb089324c55e0e689a180575ba81b23d9"
-		tag1="LA.BR.5.6"
-		tag2="msm-3.18"
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/insufficient-memory-address-information-to-prevent-arbitrary-memory-access-from-qsee-secure-applications-cve-2016-5349" ]] ; then
-		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=8d26e8eec156708c5a3d24502702638c9e265e8d"
-		tag1="LA.BR.5.6"
-		tag2="msm-3.18"
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=b54cce804d722b1e7fe137a589fca5fd9e99a0a6"
-		tag1="LA.BR.5.6"
-		tag2="msm-3.18"
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=4a3e522b0db0a340073668b15785bcd87783e0f6"
-		tag1="LA.BR.5.6"
-		tag2="msm-3.18"
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=9bd398661cae758ffc557adc7de74ba32654e1f9"
-		tag1="LA.BR.5.6"
-		tag2="msm-3.18"
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/integer-overflow-in-mdss-driver-cve-2016-5344" ]] ; then
-		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=1d2297267c24f2c44bd0ecb244ddb8bc880a29b7"
-		tag1="LA.BR.5.6"
-		tag2="msm-3.18"
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/invalid-path-check-on-ashmem-memory-file-cve-2016-5340" ]] ; then
-		url="https://source.codeaurora.org/quic/la/kernel/msm-3.10/patch/?id=06e51489061e5473b4e2035c79dcf7c27a6f75a6"
-		tag1="APSS.FSM.3.0"
-		tag2="msm-3.10"
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/multiple-memory-corruption-issues-in-write-operation-in-qdsp6v2-voice-service-driver-cve-2016-5343" ]] ; then
-		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=6927e2e0af4dcac357be86ba563c9ae12354bb08"
-		tag1="LA.BR.5.6"
-		tag2="msm-3.18"
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/multiple-vulnerabilities-in-msm-qdsp6-audio-driver-allow-kernel-memory-corruption-cve-2016-2064-cve-2016-2065-cve-2016-2066" ]] ; then
-		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=775fca8289eff931f91ff6e8c36cf2034ba59e88"
-		tag1="LA.BR.5.6"
-		tag2="msm-3.18"
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/null-pointer-dereference-when-processing-accept-system-call-by-user-process-on-af_msm_ipc-sockets-cve-2016-5870" ]] ; then
-		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=71fe5361cbef34e2d606b79e8936a910a3e95566"
-		tag1="LA.BR.5.6"
-		tag2="msm-3.18"
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/out-of-bounds-read-when-processing-a-voice-svc-request-cve-2017-8245" ]] ; then
-		url="https://source.codeaurora.org/quic/la/kernel/msm-3.10/patch/?id=ececf97911515114030bef1fc6df630dbb706f17"
-		tag1="APSS.FSM.3.0"
-		tag2="msm-3.10"
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=f53af3805879292423465cd0877cc7a75131ce10"
-		tag1="LA.BR.5.6"
-		tag2="msm-3.18"
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://source.codeaurora.org/quic/la/kernel/msm-4.4/patch/?id=5b2f6e011ba92f28e8d7dbeb11c4ee7344c33186"
-		tag1="BosSen-msm-44"
-		tag2="msm-4.4"
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/privilege-escalation-vulnerability-in-graphics-driver-cve-2016-2067" ]] ; then
-		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=410cfa95f0a1cf58819cbfbd896f9aa45b004ac0"
-		tag1="LA.BR.5.6"
-		tag2="msm-3.18"
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
 	fi
 
-	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/multiple-issues-in-wlan-driver-allow-local-privilege-escalation-cve-2015-0569-cve-2015-0570-cve-2015-0571" \
-		&& "${cve_id}" == "CVE-2015-0569" ]] ; then
-		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=a079d716b5481223f0166c644e9ec7c75a31b02c"
-		tag1="master"
-		tag2="qcald-2.0"
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
+	if [[ "${cve_id}" == "CVE-2019-16229" && "${url}" == "https://lkml.org/lkml/diff/2019/9/9/487/1" ]] ; then
+		filterdiff -i '*/drivers/gpu/drm/amd/amdkfd/kfd_interrupt.c' \
+			"${src}" > "${src}.t"
+		mv "${src}.t" "${src}"
+		sed -i -e 's|b/b/|b/|g' -e 's|a/linux/|a/|g' "${src}"
 	fi
 
-	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/multiple-issues-in-wlan-driver-allow-local-privilege-escalation-cve-2015-0569-cve-2015-0570-cve-2015-0571" \
-		&& "${cve_id}" == "CVE-2015-0570" ]] ; then
-		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=8bd73c3452ab22ba9bdbaac5ab12de2ed25fcb9d"
-		tag1="master"
-		tag2="qcald-2.0"
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
+	if [[ "${cve_id}" == "CVE-2019-16230" && "${url}" == "https://lkml.org/lkml/diff/2019/9/9/487/1" ]] ; then
+		filterdiff -i '*/drivers/gpu/drm/radeon/radeon_display.c' \
+			"${src}" > "${src}.t"
+		mv "${src}.t" "${src}"
+		sed -i -e 's|b/b/|b/|g' -e 's|a/linux/|a/|g' "${src}"
 	fi
 
-	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/multiple-issues-in-wlan-driver-allow-local-privilege-escalation-cve-2015-0569-cve-2015-0570-cve-2015-0571" \
-		&& "${cve_id}" == "CVE-2015-0571" ]] ; then
-		tag1="master"
-		tag2="qcald-2.0"
-
-		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=6feb2faf80a05940618aa2eef2b62e4e2e54f148"
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=fe4208157c899a5de4d6769d13f6620fc32ebfa9"
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=0e53a89bfe0dbb50e0dde9a6960d274386247cd9"
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=88ce639e7a0bba852f193b6f53b7ca1926a09b02"
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=0858d21caf17d56f8d2353590c1ec245073222e0"
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=2905578424256be07e6b9d8c63bb83d40cc52a71"
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=be62ecde85228b91c66fb047e27d25132f56bd0d"
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=aaeeed43f9597631982835481c7cf2621f6455f0"
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=6642bccf3ed8cba176dee7d4bbc21fc4580efb7b"
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=6665a9697b404acf4d2e7d52d9c2b19512c9b239"
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=9eeafd788f53cc37c169b299f91ca9c558b228f9"
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=55bdc6d1c88a100dc4a71bf855b69db522c9b5b5"
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://source.codeaurora.org/quic/la/platform/vendor/qcom-opensource/wlan/qcacld-2.0/patch/?id=fb9fb202c71547dba648c9b08d97645c6f42ca6e"
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
+	if [[ "${cve_id}" == "CVE-2019-16231" && "${url}" == "https://lkml.org/lkml/diff/2019/9/9/487/1" ]] ; then
+		filterdiff -i '*/drivers/net/fjes/fjes_main.c' \
+			"${src}" > "${src}.t"
+		mv "${src}.t" "${src}"
+		sed -i -e 's|b/b/|b/|g' -e 's|a/linux/|a/|g' "${src}"
 	fi
 
-	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/stack-based-buffer-overflow-in-msm-thermal-driver-allows-kernel-memory-corruption-cve-2016-2063" ]] ; then
-		url="https://source.codeaurora.org/quic/la/kernel/msm-3.10/patch/?id=ab3f46119ca10de87a11fe966b0723c48f27acd4"
-		tag1="APSS.FSM.3.0"
-		tag2="msm-3.10"
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/uninitialized-channel-map-array-can-leak-data-to-user-space-in-qdsp6v2-driver-cve-2016-5347" ]] ; then
-		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=ed4d6f5d8451d99860950d0abf8ad583efed6d5c"
-		tag1="LA.BR.5.6"
-		tag2="msm-3.18"
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://source.codeaurora.org/quic/la//kernel/msm-4.4/commit/?id=f14390f13e62460fc6b05fc0acde0e825374fdb6"
-		tag1="BosSen-msm-44"
-		tag2="msm-4.4"
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-	if [[ "${url}" == "https://www.codeaurora.org/security-advisory/use-after-free-in-alsa-pcm-playback-kernel-module-cve-2017-8246" ]] ; then
-		url="https://source.codeaurora.org/quic/la/kernel/msm-3.10/patch/?id=578eb74435eccdc3df516fd744941a7d872fac6c"
-		tag1="APSS.FSM.3.0"
-		tag2="msm-3.10"
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://source.codeaurora.org/quic/la/kernel/msm-3.18/patch/?id=30baaec8afb05abf9f794c631ad944838d498ab8"
-		tag1="LA.BR.5.6"
-		tag2="msm-3.18"
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://source.codeaurora.org/quic/la/kernel/msm-4.4/patch/?id=9734b72ae21eca557540c3c42d356dd131a20004"
-		tag1="BosSen-msm-44"
-		tag2="msm-4.4"
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
+	if [[ "${cve_id}" == "CVE-2019-16232" && "${url}" == "https://lkml.org/lkml/diff/2019/9/9/487/1" ]] ; then
+		filterdiff -i '*/drivers/net/wireless/marvell/libertas/if_sdio.c' \
+			"${src}" > "${src}.t"
+		mv "${src}.t" "${src}"
+		sed -i -e 's|b/b/|b/|g' -e 's|a/linux/|a/|g' "${src}"
 	fi
 
-	if [[ "${url}" == "https://marc.info/?t=150525503100001&r=1&w=2&q=mbox" ]] ; then
-		url="https://github.com/torvalds/linux/commit/e785fa0a164aa11001cba931367c7f94ffaff888.patch" #1
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://github.com/torvalds/linux/commit/3ea15452ee85754f70f3b9fa1f23165ef2e77ba7.patch" #2
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
+	if [[ "${cve_id}" == "CVE-2019-16233" && "${url}" == "https://lkml.org/lkml/diff/2019/9/9/487/1" ]] ; then
+		filterdiff -i '*/drivers/scsi/qla2xxx/qla_os.c' \
+			"${src}" > "${src}.t"
+		mv "${src}.t" "${src}"
+		sed -i -e 's|b/b/|b/|g' -e 's|a/linux/|a/|g' "${src}"
 	fi
-
-	if [[ "${url}" == "https://seclists.org/oss-sec/2015/q4/425" ]] ; then
-		url="https://github.com/torvalds/linux/commit/f079fa005aae08ee0e1bc32699874ff4f02e11c1.patch" # 1
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://github.com/torvalds/linux/commit/e7358f54a3954df16d4f87e3cad35063f1c17de5.patch" # 2
-		_wd "${url}" "${src}"
-		_process_patch
-
-		# skip https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/patch/?id=46e8a249423ff98e250c9dee2a37906061808b33 # 3 applies to linux-firmware package
-
-		url="https://github.com/torvalds/linux/commit/5e091e7ad0baa84a401b4dc3f859890990f0854f.patch" # 4 (may not be necessary for newer)
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-
-	if [[ "${url}" == "https://openwall.com/lists/oss-security/2015/05/29/5" ]] ; then
-		url="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/?id=820f9f147dcce2602eefd9b575bbbd9ea14f0953" # 1
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/?id=cd4a40174b71acd021877341684d8bb1dc8ea4ae" # 2
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-
-	if [[ "${url}" == "https://www.openwall.com/lists/oss-security/2019/11/27/1" ]] ; then
-		url="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/?id=39e72bf96f5847ba87cc5bd7a3ce0fed813dc9ad" # 1
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/?id=af2e8c68b9c5403f77096969c516f742f5bb29e0" # 2
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-
-	if [[ "${url}" == "https://www.openwall.com/lists/oss-security/2017/06/12/2" ]] ; then
-		url="https://github.com/torvalds/linux/commit/d11662f4f798b50d8c8743f433842c3e40fe3378.patch" # 1
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://github.com/torvalds/linux/commit/ba3021b2c79b2fa9114f92790a99deb27a65b728.patch" # 2
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-
-	if [[ "${url}" == "https://www.openwall.com/lists/oss-security/2017/06/27/5" ]] ; then
-		url="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/fs/nfsd?id=b550a32e60a4941994b437a8d662432a486235a5" # 1
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/fs/nfsd?id=f961e3f2acae94b727380c0b74e2d3954d0edf79" # 2
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-
-	if [[ "${url}" == "https://www.openwall.com/lists/oss-security/2017/09/15/4" ]] ; then
-		url="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/?id=3a8b0677fc6180a467e26cc32ce6b0c09a32f9bb" # 1
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/?id=36ae3c0a36b7456432fedce38ae2f7bd3e01a563" # 2
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-
-	if [[ "${url}" == "https://www.openwall.com/lists/oss-security/2018/10/02/2" ]] ; then
-		url="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/?id=d26c25a9d19b5976b319af528886f89cf455692d" # 1
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/?id=2a3f93459d689d990b3ecfbe782fec89b97d3279" # 2
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-
-	if [[ "${url}" == "https://www.mail-archive.com/linux-kernel@vger.kernel.org/msg1408967.html" ]] ; then
-		url="https://patchwork.kernel.org/patch/9755753/mbox/" # 1
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://patchwork.kernel.org/patch/9755757/mbox/" # 2
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-
-	if [[ "${url}" == "https://marc.info/?l=linux-netdev&m=149200746116366&q=mbox" ]] ; then
-		url="https://marc.info/?l=linux-netdev&m=149200746116365&q=mbox" # 1
-		_wd "${url}" "${src}"
-		_process_patch
-
-		url="https://marc.info/?l=linux-netdev&m=149200742616349&q=mbox" # 2
-		_wd "${url}" "${src}"
-		_process_patch
-		return 0
-	fi
-	return 1
 }
