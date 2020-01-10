@@ -956,6 +956,23 @@ ban_commit() {
 	fi
 }
 
+is_broken_url() {
+	if [[ "${url}" =~ ("stable/linux.git"|"torvalds/linux.git") ]] ; then
+		:;
+	else
+		if [[ "${G_DOWNLOAD_TOOL}" == "curl" ]] ; then
+			curl -o /dev/null -s -D - \
+				| grep -q -F "404 Not found" \
+				&& return 0
+		else
+			wget -O /dev/null "${url}" 2>&1 \
+				| grep -q -F -e "404 Not found" \
+				&& return 0
+		fi
+	fi
+	return 1
+}
+
 # provides links directly to raw patch
 get_patch_direct_link() {
 	url="${1}"
@@ -984,8 +1001,13 @@ get_patch_direct_link() {
 		local p=$(echo "${url}" | cut -f2 -d "?" \
 			| cut -f1 -d ";" | sed -e "s|p=||" \
 			| sed -r -e "s|linux-[0-9.]*.git|linux.git|g")
-		url="https://git.kernel.org/pub/scm/${p}/patch/?id=${h}"
-		is_direct_url="1"
+		if is_broken_url ; then
+			url="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/?id=${h}"
+			is_substituted_url="1"
+		else
+			url="https://git.kernel.org/pub/scm/${p}/patch/?id=${h}"
+			is_direct_url="1"
+		fi
 	elif [[ ( "${url}" =~ git\.kernel\.org || \
 		  "${url}" =~ www\.kernel\.org ) \
 		&& ( "${url}" =~ ";a=commitdiff;" \
@@ -997,8 +1019,13 @@ get_patch_direct_link() {
 			| sed -r -e "s|linux-[0-9.y]*.git|linux.git|g")
 		local h=$(echo "${url}" | grep -o -P -e ";h=([a-z0-9]+)" \
 			| sed -e "s|;h=||")
-		url="https://git.kernel.org/pub/scm/${p}/patch/?id=${h}"
-		is_direct_url="1"
+		if is_broken_url ; then
+			url="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/?id=${h}"
+			is_substituted_url="1"
+		else
+			url="https://git.kernel.org/pub/scm/${p}/patch/?id=${h}"
+			is_direct_url="1"
+		fi
 	elif [[ "${url}" =~ "/commit/".*(\&|\?)"id="[0-9a-z]+ ]] ; then
 		url=$(echo "${url}" | sed -e "s|/commit/|/patch/|")
 		is_direct_url="1"
@@ -1047,6 +1074,10 @@ get_patch_direct_link() {
 		url="${url}/solution"
 		is_direct_url="1"
 	fi
+
+	# autofix broken urls
+
+
 	fix_direct_download "${url}" "${cve_id}"
 }
 
