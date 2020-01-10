@@ -1046,7 +1046,8 @@ get_patch_direct_link() {
 			url=$(wget -O /dev/null "${url}" 2>&1 \
 				| grep -P -e "http.*\[following\]" \
 				| sed -e "s|Location: ||" \
-				-e "s|\[following\]||g")
+				-e "s|\[following\]||g" \
+				| tail -n 1 | sed -r -e "s|[ ]+$||g")
 			url="${url}mbox"
 		fi
 		is_direct_url="1"
