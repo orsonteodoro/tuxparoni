@@ -405,7 +405,8 @@ split_jsons() {
 			| map(select(contains({cve:{description:{description_data:[{value:\"linux kernel\"}]}}}) or \
 			contains({cve:{description:{description_data:[{value:\"Linux kernel\"}]}}}) or \
 			contains({cve:{description:{description_data:[{value:\"Linux Kernel\"}]}}}) or \
-			contains({cve:{description:{description_data:[{value:\"Linux Driver\"}]}}}) ))" "${feed_json}" \
+			contains({cve:{description:{description_data:[{value:\"Linux Driver\"}]}}}) or \
+			contains({cve:{description:{description_data:[{value:\"Linux driver\"}]}}}) ))" "${feed_json}" \
 			> "${json_frag}"
 
 		local C=$(jq ".[].cve.CVE_data_meta.ID" "${json_frag}" | sed -e "s|\"||g")
