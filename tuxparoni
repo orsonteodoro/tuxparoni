@@ -2100,7 +2100,7 @@ check_dependencies() {
 	bash_version=$(echo "${$BASH_VERSION}" \
 		| grep -o -E -e "version [0-9\.]+" \
 		| sed -e "s|version ||g" | head -n 1)
-	if is_x_le_y "${bash_version}" "4.0" ; then
+	if is_x_lt_y "${bash_version}" "4.0" ; then
 		eerror "You need Bash >= 4.0"
 		exit 1
 	fi
