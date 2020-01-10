@@ -795,7 +795,7 @@ download_urls() {
 		local url=$(echo "${line}" | cut -f 2- -d $' ')
 
 		grep -q -F -e "${line}" "${G_CACHE_FOLDER}/already_downloaded" \
-			echo -n "c" && continue
+			&& echo -n "c" && continue
 
 		[[ "${url}" =~ (^info|^defunct|^banned|^flaw) ]] && continue
 		local dl_meta="${G_TEMP_DIR}"/$(echo "${cve_id}:${url}" \
@@ -838,7 +838,7 @@ download_urls() {
 		local url=$(echo "${line}" | cut -f 2- -d $' ')
 
 		grep -q -F -e "${line}" "${G_CACHE_FOLDER}/already_downloaded" \
-			echo -n "c" && continue
+			&& echo -n "c" && continue
 
 		( _process_patch "${url}" "${cve_id}" ) &
 		P+=($!)
