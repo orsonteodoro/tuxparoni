@@ -153,6 +153,8 @@ Args:
 	-ca, --cmd-apply		applies patches
 	-mx, --max-year			sets max year to process
 	-mn, --min-year			sets min year to process
+	-mpc, --max-patch-connections	sets the maximum connections, 100 is default
+	-mbc, --max-bulk-connections	sets the maximum bulk connections, 5 is default
 	-t, --temp			sets the temp dir
 	--curl				downloads with curl (default)
 	--wget				downloads with wget
@@ -809,6 +811,9 @@ download_urls() {
 
 	local P=()
 	local min_year="${G_MIN_YEAR}"
+
+	local thread_count=0
+
 	while IFS= read -r line ; do
 		local cve_id=$(echo "${line}" | cut -f 1 -d $' ')
 		local cve_year=$(echo "${cve_id}" | cut -f2 -d '-')
@@ -834,6 +839,15 @@ download_urls() {
 			wget -b -q -c -O "${src}" "${url}" >/dev/null
 		fi
 		P+=($!)
+		thread_count=$(((${thread_count}+1) mod ${G_MAX_PATCH_CONNECTIONS}))
+
+		if (( ${G_MAX_PATCH_CONNECTIONS} == 0 )) ; then
+			for p in ${P[@]} ; do
+				wait $p
+			done
+			P=()
+		fi
+
 		echo -n "."
 	done < "${G_CACHE_FOLDER}/download_list"
 
@@ -1894,6 +1908,14 @@ arg_parse() {
 				echo "${H_HELP}"
 				exit ${EOK}
 				;;
+			-mbc|--max-bulk-connections)
+				G_MAX_BULK_CONNECTIONS="${ARGS[0]}"
+				ARGS=("${ARGS[@]:1}")
+				;;
+			-mpc|--max-patch-connections)
+				G_MAX_PATCH_CONNECTIONS="${ARGS[0]}"
+				ARGS=("${ARGS[@]:1}")
+				;;
 			-mn|--min-year)
 				G_MIN_YEAR="${ARGS[0]}"
 				ARGS=("${ARGS[@]:1}")
@@ -2016,6 +2038,14 @@ review_envars() {
 }
 
 validate_envars_and_globals() {
+	# sanitize
+	G_MAX_BULK_CONNECTIONS=$(echo "${G_MAX_BULK_CONNECTIONS}" \
+		| sed -r -e "s|[^0-9]||g")
+	G_MAX_PATCH_CONNECTIONS=$(echo "${G_MAX_PATCH_CONNECTIONS}" \
+		| sed -r -e "s|[^0-9]||g")
+	G_MIN_YEAR=$(echo "${G_MIN_YEAR}" | sed -r -e "s|[^0-9]||g")
+	G_MAX_YEAR=$(echo "${G_MAX_YEAR}" | sed -r -e "s|[^0-9]||g")
+
 	[[ "${CVE_ALLOW_RISKY_BACKPORTS}" == 1 \
 		|| "${CVE_ALLOW_RISKY_BACKPORTS}" == 0 ]] \
 		|| CVE_FIX_REJECT_DISPUTED=0
