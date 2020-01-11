@@ -257,7 +257,7 @@ _download_feeds() {
 	einfo "Download feeds in the background in parallel.  Waiting..."
 
 	for p in ${P[@]} ; do
-		wait $p
+		wait $p 2>/dev/null
 	done
 }
 
@@ -370,7 +370,7 @@ unpack_feeds() {
 	einfo "Unpacking feeds in the background in parallel.  Waiting..."
 
 	for p in ${P[@]} ; do
-		wait $p
+		wait $p 2>/dev/null
 	done
 
 	for y in $(seq ${min_year} ${G_MAX_YEAR}) recent modified ; do
@@ -435,7 +435,7 @@ split_jsons() {
 		einfo "Splitting in parallel... waiting..."
 
 		for p in ${P[@]} ; do
-			wait $p
+			wait $p 2>/dev/null
 		done
 
 		rm "${json_frag}"
@@ -843,7 +843,7 @@ download_urls() {
 
 		if (( ${G_MAX_PATCH_CONNECTIONS} == 0 )) ; then
 			for p in ${P[@]} ; do
-				wait $p
+				wait $p 2>/dev/null
 			done
 			P=()
 		fi
@@ -855,7 +855,7 @@ download_urls() {
 	einfo "Waiting for all download threads to complete"
 
 	for p in ${P[@]} ; do
-		wait $p
+		wait $p 2>/dev/null
 	done
 
 	P=()
