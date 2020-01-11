@@ -707,6 +707,7 @@ queue_urls() {
 	cat /dev/null > "${G_CACHE_FOLDER}/download_list"
 	touch "${G_CACHE_FOLDER}/already_downloaded"
 
+	local min_year="${G_MIN_YEAR}"
 	for json_file in $(ls "${G_SPLIT_JSONS_DIR}"/*.json) ; do
 		local is_patchable=0
 		local exclude_binary=0
@@ -753,7 +754,7 @@ queue_urls() {
 			local original_url=$(jq \
 				".[].cve.references.reference_data[${i}].url" \
 				"${json_file}" \
-				| sed -e "s|\"||g")
+				| sed -e "s|\"||g" | head -n 1)
 			if [[ "${is_patchable}" == "1" ]] ; then
 				local tags=$(jq \
 				".[].cve.references.reference_data[${i}].tags" \
@@ -807,6 +808,7 @@ download_urls() {
 	einfo "Downloading patches"
 
 	local P=()
+	local min_year="${G_MIN_YEAR}"
 	while IFS= read -r line ; do
 		local cve_id=$(echo "${line}" | cut -f 1 -d $' ')
 		local cve_year=$(echo "${cve_id}" | cut -f2 -d '-')
@@ -827,13 +829,9 @@ download_urls() {
 
 		# can silence but need to create a shell
 		if [[ "${G_DOWNLOAD_TOOL}" == "curl" ]] ; then
-			echo -e "${url}" \
-				| xargs -I '{}' -P ${G_MAX_PATCH_CONNECTIONS} \
-				curl -s -L -C - -o "${src}" "${url}"
+			curl -s -L -C - -o "${src}" "${url}" & >/dev/null
 		else
-			echo -e "${url}" \
-				| xargs -I '{}' -P ${G_MAX_PATCH_CONNECTIONS} \
-				wget -q -c -O "${src}" "${url}"
+			wget -b -q -c -O "${src}" "${url}" >/dev/null
 		fi
 		P+=($!)
 		echo -n "."
@@ -873,7 +871,7 @@ download_urls() {
 	einfo "Waiting for all evaluations to complete"
 
 	for p in ${P[@]} ; do
-		wait $p
+		wait $p 2>/dev/null
 	done
 
 	einfo "Evaluations done"
@@ -1227,6 +1225,7 @@ report_cves_json_only() {
 report_cves_patches_only() {
 	pushd "${G_KERNEL_SOURCE_FOLDER}" > /dev/null
 
+	local min_year="${G_MIN_YEAR}"
 	for json_file in $(ls "${G_SPLIT_JSONS_DIR}"/*.json) ; do
 		#einfo "Processing ${json_file}"
 
@@ -1313,6 +1312,7 @@ drytest_cves() {
 	pushd "${G_KERNEL_SOURCE_FOLDER}" > /dev/null
 	local t_out=$(tempfile)
 	local displayed_kernel_release=0
+	local min_year="${G_MIN_YEAR}"
 	cat /dev/null > "${G_LOGS}/drytest"
 	while IFS= read -r m ; do
 		total=$((total+1))
@@ -1662,6 +1662,7 @@ apply_patches() {
 	pushd "${G_KERNEL_SOURCE_FOLDER}" > /dev/null
 	local t_out=$(tempfile)
 	local displayed_kernel_release=0
+	local min_year="${G_MIN_YEAR}"
 	while IFS= read -r p ; do
 		total=$((total+1))
 		local cve_id=$(basename "${p}" | cut -f2-4 -d "-")
