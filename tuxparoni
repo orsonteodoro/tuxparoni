@@ -153,8 +153,8 @@ Args:
 	-ca, --cmd-apply		applies patches
 	-mx, --max-year			sets max year to process
 	-mn, --min-year			sets min year to process
-	-mpc, --max-patch-connections	sets the maximum connections, 100 is default
-	-mbc, --max-bulk-connections	sets the maximum bulk connections, 5 is default
+	-mpc, --max-patch-connections	sets the maximum patch connections, ${G_MAX_PATCH_CONNECTIONS} is default
+	-mbc, --max-bulk-connections	sets the maximum bulk connections, ${G_MAX_BULK_CONNECTIONS} is default
 	-t, --temp			sets the temp dir
 	--curl				downloads with curl (default)
 	--wget				downloads with wget
