@@ -1059,7 +1059,7 @@ get_patch_direct_link() {
 			url="${url}mbox"
 		else
 			local log=$(wget -O /dev/null "${url}" 2>&1)
-			if echo "${log}" | grep -P -e "http.*\[following\]" ; then
+			if echo "${log}" | grep -q -P -e "http.*\[following\]" ; then
 				# prevent from getting a nothing result
 				url=$(echo "${log}" \
 					| grep -P -e "http.*\[following\]" \
