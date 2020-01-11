@@ -1052,16 +1052,21 @@ get_patch_direct_link() {
 		fi
 		is_direct_url="1"
 	elif [[ "${url}" =~ patchwork\.kernel\.org ]] ; then
+		# testcase http://patchwork.kernel.org/patch/36649/
 		if [[ "${G_DOWNLOAD_TOOL}" == "curl" ]] ; then
 			url=$(curl -L -s -o /dev/null -w %{url_effective} \
 				"${url}")
 			url="${url}mbox"
 		else
-			url=$(wget -O /dev/null "${url}" 2>&1 \
-				| grep -P -e "http.*\[following\]" \
-				| sed -e "s|Location: ||" \
-				-e "s|\[following\]||g" \
-				| tail -n 1 | sed -r -e "s|[ ]+$||g")
+			local log=$(wget -O /dev/null "${url}" 2>&1)
+			if echo "${log}" | grep -P -e "http.*\[following\]" ; then
+				# prevent from getting a nothing result
+				url=$(echo "${log}" \
+					| grep -P -e "http.*\[following\]" \
+					| sed -e "s|Location: ||" \
+					-e "s|\[following\]||g" \
+					| tail -n 1 | sed -r -e "s|[ ]+$||g")
+			fi
 			url="${url}mbox"
 		fi
 		is_direct_url="1"
