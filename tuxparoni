@@ -1767,7 +1767,7 @@ apply_patches() {
 	rm "${t_out}"
 	popd > /dev/null
 	rm "${t_files}"
-	local hunks=$(grep -F -e "^@@" "${G_PATCHES_DIR}" | wc -l)
+	local hunks=$(grep -P -e "^@@" "${G_PATCHES_DIR}"/* | wc -l)
 	einfo \
 "${c} vulnerabilities detected, ${total} total patches tested, ${bad_patches} \
 bad patches, ${bad_ports} bad backports or forwardports patches, ${hunks} \
