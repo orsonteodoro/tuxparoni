@@ -1330,9 +1330,14 @@ drytest_cves() {
 	cat /dev/null > "${G_LOGS}/drytest"
 	while IFS= read -r m ; do
 		total=$((total+1))
-		local p="${G_PATCHES_DIR}"/$(basename "${m}" | sed -r -e "s|\.patch$|.meta|g")
+		local p="${G_PATCHES_DIR}"/$(basename "${m}" | sed -r -e "s|\.meta$|.patch|g")
 		local cve_id=$(grep -F -e "cve_id" "${m}" | cut -f2 -d $' ')
 		local cve_year=$(echo "${cve_id}" | cut -f2 -d "-")
+
+		if [[ ! -f "${p}" ]] ; then
+			# deduped
+			continue
+		fi
 
 		(( ${G_MIN_YEAR} <= ${cve_year} \
 			&& ${cve_year} <= ${G_MAX_YEAR} )) \
