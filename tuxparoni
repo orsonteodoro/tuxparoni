@@ -540,34 +540,42 @@ _process_patch() {
 
 	local is_patch_processable=0
 
-	# many will be marked as "Vendor Advisory" instead of "Patch" at 2016 and earlier
-	# still needs to be validated as a good patch
+	# Many links will be marked as "Vendor Advisory" instead of "Patch" at
+	# 2016 and earlier.
+	# An accepted commit still needs to be validated as a fix patch
+	# because the flaws get mixed in the CVE entry.
 	if [[ "${request_inspection}" == "1" ]] ; then
 		if grep -q -P -i -e \
 "(CVE-[0-9]{4}-[0-9]+|fix|validate|sanity check|do not leak|don't leak| cap \
 |make sure|use kzalloc|prevent| limit |correct)" "${src}" ; then
-			# essentially synonyms for fix, limit
+			# These are essentially synonyms for fix and limit.
 
-			# re-review:
+			# Re-review:
 			# CVE-2015-6252
 
 			# request_inspection comes from a CVE not explicitly
-			# marked Patch for any of it's links but contain an
-			# official commit from github.com/torvald or kernel.org
+			# marked Patch for any of its links but contain an
+			# official commit from github.com/torvald or kernel.org.
 			#
-			# the flag will inspect the contents of the
-			# commit to determine if it qualifies as a possible fix
+			# The flag will inspect the contents of the
+			# commit to determine if it qualifies as a possible fix.
 			#
 
-			# certain keywords that could be fixes
-			# the CVEs listed refer a commit containing them
+			# The list below lists certain keywords that could be
+			# fixes and the the CVEs listed refer a commit
+			# containing them.
+
+			# General common keywords are favored to minimize time
+			# cost.
 
 			# validate: CVE-2016-5829, CVE-2016-5871, CVE-2015-8569
 			# add validation: CVE-2015-8543
-			# fix: CVE-2016-5728, CVE-2016-4580, CVE-2016-4578, CVE-2016-4569
+			# fix: CVE-2016-5728, CVE-2016-4580, CVE-2016-4578,
+			#      CVE-2016-4569
 			# fixes: CVE-2016-4568, CVE-2016-3951
 			# avoid: CVE-2016-4581
-			# sanity check: CVE-2016-3689, CVE-2016-3140, CVE-2016-3138
+			# sanity check: CVE-2016-3689, CVE-2016-3140,
+			#               CVE-2016-3138
 			# do not leak: CVE-2016-0823
 			# cap the length: CVE-2015-8830
 			# cap: CVE-2015-6526
