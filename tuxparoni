@@ -839,7 +839,7 @@ download_urls() {
 			wget -b -q -c -O "${src}" "${url}" >/dev/null
 		fi
 		P+=($!)
-		thread_count=$(((${thread_count}+1) mod ${G_MAX_PATCH_CONNECTIONS}))
+		thread_count=$(((${thread_count}+1) % ${G_MAX_PATCH_CONNECTIONS}))
 
 		if (( ${G_MAX_PATCH_CONNECTIONS} == 0 )) ; then
 			for p in ${P[@]} ; do
