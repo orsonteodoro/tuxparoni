@@ -997,7 +997,7 @@ queue_multipatch() {
 	fi
 
 	if [[ "${cve_id}" == "CVE-2019-19062" \
-		&& "${download_url}" == "https://github.com/torvalds/linux/commit/ffdde5932042600c6807d46c1550b28b0db6a3bc.patch" ]] ; then
+		&& "${url}" == "https://github.com/torvalds/linux/commit/ffdde5932042600c6807d46c1550b28b0db6a3bc.patch" ]] ; then
 		# CVE-2019-19062
 
 		# ffdde for 5.5
@@ -1025,7 +1025,7 @@ queue_multipatch() {
 	fi
 
 	if [[ "${cve_id}" == "CVE-2019-19227" \
-		&& "${download_url}" == "https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/?id=9804501fa1228048857910a6bf23e085aade37cc" ]] ; then
+		&& "${url}" == "https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/?id=9804501fa1228048857910a6bf23e085aade37cc" ]] ; then
 		# CVE-2019-19227
 
 		# 9804 for >=5.1
@@ -1043,6 +1043,22 @@ queue_multipatch() {
 		index="1"
 		enqueue_download "${url}" "${cve_id}"
                 return 0
+	fi
+
+	if [[ "${url}" == "https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/?id=181e448d8709e517c9c7b523fcd209f24eb38ca7" ]] ; then
+		# CVE-2019-19241
+		htags="5.5"
+		is_substituted_url="0"
+		is_direct_url="1"
+		enqueue_download "${url}" "${cve_id}"
+		return 0
+
+		url="https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/patch/?id=ad700a7eb17dc3fc1f96152b4291532e5ba5a7ad"
+		htags="5.3"
+		enqueue_download "${url}" "${cve_id}"
+		is_substituted_url="1"
+		is_direct_url="0"
+		return 0
 	fi
 
 	return 1
