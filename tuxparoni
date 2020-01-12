@@ -156,8 +156,8 @@ Args:
 	-mpc, --max-patch-connections	sets the maximum patch connections, ${G_MAX_PATCH_CONNECTIONS} is default
 	-mbc, --max-bulk-connections	sets the maximum bulk connections, ${G_MAX_BULK_CONNECTIONS} is default
 	-t, --temp			sets the temp dir
-	--curl				downloads with curl (default)
-	--wget				downloads with wget
+	--curl				downloads with curl
+	--wget				downloads with wget (default)
 	-h, --help			prints all the supported commands
 	-v, --version			prints version info
 
