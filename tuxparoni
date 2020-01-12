@@ -1650,10 +1650,10 @@ conflict_resolver_default() {
 				# partially apply it
 	local patch_meta_path=$(echo "${patch_path}" \
 		| sed -r -e "s|\.patch$|.meta|g")
-	local original_url=$(cat "${patch_meta_path}" \
-		| grep -F -e "original_url:" | cut -f2 -d $' ')
-	local download_url=$(cat "${patch_meta_path}" \
-		| grep -F -e "download_url:" | cut -f2 -d $' ')
+	local original_url=$(grep -r -e "original_url:" "${patch_meta_path}" \
+		| cut -f2 -d $' ')
+	local download_url=$(grep -r -e "last_url:" "${patch_meta_path}" \
+		| cut -f2 -d $' ')
 	local patch_hash=$(sha256sum "${patch_path}" \
 		| cut -f1 -d " ")
 	local alterative_patch=""
