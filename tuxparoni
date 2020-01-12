@@ -472,12 +472,23 @@ get_severity() {
 save_test_meta() {
 	# for drytest, report, and filtering drivers/subsystems for
 	# custom hardware setups
-	local meta_path="${G_PATCHES_DIR}/${dest_fn_base}.meta"
-	if [[ -f "${meta_path}" ]] ; then
-		#don't clobbler
-		return
-	fi
-	echo "meta_version: ${G_PATCH_META_VERSION}" > "${meta_path}"
+	local i=0
+	local meta_path=""
+	while true ; do
+		# mutex lock
+		if mkdir "${G_CACHE_FOLDER}/saving_meta" 2>/dev/null ; then
+			meta_path="${G_PATCHES_DIR}/${dest_fn_base}.meta"
+			if [[ -f "${meta_path}" ]] ; then
+				rm -rf "${G_CACHE_FOLDER}/saving_meta"
+				#don't clobbler
+				return
+			fi
+			echo "meta_version: ${G_PATCH_META_VERSION}" > "${meta_path}"
+			break
+		fi
+	done
+
+	# critical section end
 	echo "cve_id: ${cve_id}" >> "${meta_path}"
 	echo "severity: ${severity}" >> "${meta_path}"
 	echo "timestamp: ${timestamp}" >> "${meta_path}"
@@ -489,13 +500,12 @@ save_test_meta() {
 	echo "is_direct_url: ${is_direct_url}" >> "${meta_path}"
 	echo "is_disputed: ${is_disputed}" >> "${meta_path}"
 	echo "is_substituted_url: ${is_substituted_url}" >> "${meta_path}"
-        if [[ -n "${htags}" ]] ; then
-                # hidden tags for controlling backports or anything
-                echo "htags: ${htags}" >> "${meta_path}"
-        fi
+	if [[ -n "${htags}" ]] ; then
+		# hidden tags for controlling backports or anything
+		echo "htags: ${htags}" >> "${meta_path}"
+	fi
 	if [[ "${is_patch_processable}" == "1" ]] ; then
 		echo "subject: ${subject_raw}" >> "${meta_path}"
-
 		[[ -n "${tag1}" ]] \
 			&& echo "tag1: ${tag1}" >> "${meta_path}"
 		[[ -n "${tag2}" ]] \
@@ -511,6 +521,7 @@ save_test_meta() {
 		echo "files: ${files}" >> "${meta_path}"
 		echo "dest_fn_base: ${dest_fn_base}" >> "${meta_path}"
 	fi
+	rm -rf "${G_CACHE_FOLDER}/saving_meta"
 }
 
 # required preconditions: url (final download url used as the key),
@@ -1359,33 +1370,20 @@ drytest_cves() {
 		local is_fuzzy_succeeded=0
 		local is_garbage=0
 		if [[ "${is_patch_processable}" == "1" ]] ; then
-			echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
+			local log=$(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
 				-i "${p}" 2>&1) \
-				| grep -q -F -e "succeeded at" && is_fuzzy_succeeded=1
-			echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-				-i "${p}" 2>&1) \
-				| grep -q -F -e "FAILED at" && is_failed_at=1
-			echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-				-i "${p}" 2>&1) \
-				| grep -q -F -e "can't find file" && is_file_missing=1
-			echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-				-i "${p}" 2>&1) \
-				| grep -q -F -e "malformed" && is_malformed=1
-			echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-				-i "${p}" 2>&1) \
-				| grep -q -F -e "Reversed (or previously applied)" \
+			local is_vulnerable="$?"
+			echo -e "${log}" | grep -q -F -e "succeeded at" && is_fuzzy_succeeded=1
+			echo -e "${log}" | grep -q -F -e "FAILED at" && is_failed_at=1
+			echo -e "${log}" | grep -q -F -e "can't find file" && is_file_missing=1
+			echo -e "${log}" | grep -q -F -e "malformed" && is_malformed=1
+			echo -e "${log}" | grep -q -F -e "Reversed (or previously applied)" \
 				&& is_previously_applied=1
-			echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-				-i "${p}" 2>&1) \
-				| grep -q -F -e "Only garbage was found in the patch input." \
+			echo -e "${log}" | grep -q -F -e "Only garbage was found in the patch input." \
 				&& is_garbage=1
 
 			# todo?
 			#read error : Is a directory
-
-			patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-				-i "${p}" 2> /dev/null 1> /dev/null
-			local is_vulnerable="$?"
 		fi
 		if [[ "${is_previously_applied}" == "1" \
 			&& "${is_fuzzy_succeeded}" != "1" \
@@ -1711,29 +1709,17 @@ apply_patches() {
 		local is_previously_applied=0
 		local is_fuzzy_succeeded=0
 		local is_garbage=0
-		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${p}" 2>&1) \
-			| grep -q -F -e "succeeded at" && is_fuzzy_succeeded=1
-		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${p}" 2>&1) \
-			| grep -q -F -e "FAILED at" && is_failed_at=1
-		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${p}" 2>&1) \
-			| grep -q -F -e "can't find file" && is_file_missing=1
-		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${p}" 2>&1) \
-			| grep -q -F -e "malformed" && is_malformed=1
-		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${p}" 2>&1) \
-			| grep -q -F -e "Reversed (or previously applied)" \
-			&& is_previously_applied=1
-		echo -e $(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${p}" 2>&1) \
-			| grep -q -F -e "Only garbage was found in the patch input." \
-			&& is_garbage=1
-		patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
-			-i "${p}" 2> /dev/null 1> /dev/null
+		local log=$(patch --dry-run ${G_PATCH_DEFAULT_OPTIONS} \
+			-i "${p}" 2>&1)
 		local is_vulnerable="$?" # 0 is true
+		echo -e "${log}" | grep -q -F -e "succeeded at" && is_fuzzy_succeeded=1
+		echo -e "${log}" | grep -q -F -e "FAILED at" && is_failed_at=1
+		echo -e "${log}" | grep -q -F -e "can't find file" && is_file_missing=1
+		echo -e "${log}" | grep -q -F -e "malformed" && is_malformed=1
+		echo -e "${log}" | grep -q -F -e "Reversed (or previously applied)" \
+			&& is_previously_applied=1
+		echo -e "${log}" | grep -q -F -e "Only garbage was found in the patch input." \
+			&& is_garbage=1
 		if [[ "${is_previously_applied}" == "1" \
 			&& "${is_fuzzy_succeeded}" != "1" \
 			&& "${is_failed_at}" != "1" \
@@ -2203,6 +2189,7 @@ main() {
 	fi
 
 	clear_downloads
+	rm -rf "${G_CACHE_FOLDER}/saving_meta"
 
 	# this is used to wipe the cache if necessary
 	echo "tuxparoni_version: ${G_VERSION}" > "${G_CACHE_FOLDER}/status"
