@@ -1623,7 +1623,7 @@ is_x_ge_y() {
 	local x="${1}"
 	local y="${2}"
 	local result=$(echo -e "${x}\n${y}" | sort -V | tr "\n" " " | cut -f1 -d $' ')
-	if [[ "${result}" == "${x}" || "${x}" == "${y}" ]] ; then
+	if [[ "${result}" != "${x}" || "${x}" == "${y}" ]] ; then
 		return 0
 	else
 		return 1
