@@ -12,7 +12,7 @@ fix_direct_download() {
 	local ourl="${1}"
 
 	# from ./tuxparoni 2>&1 | tee log.txt
-	# obtained from grep -r -e "Rejected" log.txt | sort
+	# obtained from grep -r -F -e "Rejected" log.txt | sort
 
 	# clustered by original domain
 	# each domain-grouping is backtracked independently together
